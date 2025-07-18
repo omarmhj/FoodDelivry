@@ -21,7 +21,7 @@ interface UserData {
   phone_number: number;
 }
 
-@Injectable()
+@Injectable() 
 export class UsersService {
   constructor(
     private readonly jwtService: JwtService,

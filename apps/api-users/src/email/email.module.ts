@@ -1,4 +1,4 @@
-import { Global, Module } from '@nestjs/common';
+import { Global, Module, Logger } from '@nestjs/common';
 import { EmailService } from './email.service';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { ConfigService } from '@nestjs/config';
@@ -9,26 +9,33 @@ import { EjsAdapter } from '@nestjs-modules/mailer/dist/adapters/ejs.adapter';
 @Module({
   imports: [
     MailerModule.forRootAsync({
-      useFactory: async (config: ConfigService) => ({
-        transport: {
+      useFactory: async (config: ConfigService) => {
+        const transportConfig = {
           host: config.get('SMTP_HOST'),
           secure: true,
           auth: {
             user: config.get('SMTP_MAIL'),
             pass: config.get('SMTP_PASSWORD'),
           },
-        },
-        defaults: {
-          from: 'Becodemy',
-        },
-        template: {
-          dir: join(__dirname, '../../../apps/api-users/email-templates'),
-          adapter: new EjsAdapter(),
-          options: {
-            strict: false,
+        };
+        // Custom log after transporter is created
+        setTimeout(() => {
+          Logger.log('Transporter is ready', 'MailerService');
+        }, 1000);
+        return {
+          transport: transportConfig,
+          defaults: {
+            from: 'Becodemy',
           },
-        },
-      }),
+          template: {
+            dir: join(__dirname, '../../../apps/api-users/email-templates'),
+            adapter: new EjsAdapter(),
+            options: {
+              strict: false,
+            },
+          },
+        };
+      },
       inject: [ConfigService],
     }),
   ],

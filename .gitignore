@@ -8,3 +8,9 @@
 
 # DS store
 .DS_Store
+
+# Ignore all .env files in the repo, at any depth
+.env
+.env.*
+**/.env
+**/.env.*
