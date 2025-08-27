@@ -10,6 +10,8 @@ datasource db {
 enum Role {
   Admin
   User
+  Owner
+  Staff
 }
 
 model Avatars {
@@ -21,20 +23,20 @@ model Avatars {
 }
 
 model User {
-  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  id           String      @id @default(auto()) @map("_id") @db.ObjectId
   name         String
-  email        String    @unique
-  // phone_number Float? @unique  ===> we can't use this line because sometime our phone number is null and then we can't compare it
+  email        String      @unique
   phone_number Float?
   address      String?
   password     String
   avatar       Avatars?
   reviews      Reviews[]
-  role         Role      @default(User)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  role         Role        @default(User)
+  restaurants  Restaurant[] @relation("RestaurantOwner")
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 
-  @@unique([email, phone_number], name: "unique_email_phone_number") // In this approach, a composite unique constraint (@@unique) is created on both email and phone_number. This allows phone_number to be null but enforces uniqueness when phone_number is not null.
+  @@unique([email, phone_number], name: "unique_email_phone_number")
 }
 
 model Reviews {
@@ -43,43 +45,87 @@ model Reviews {
   rating Float
   userId String @db.ObjectId
   user   User   @relation(fields: [userId], references: [id])
-  food   Foods  @relation(fields: [foodId], references: [id])
   foodId String @db.ObjectId
+  food   MenuItem @relation(fields: [foodId], references: [id])
 }
 
 model Images {
-  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
   public_id String
   url       String
-  foodId    String @db.ObjectId
-  food      Foods  @relation(fields: [foodId], references: [id])
+  foodId    String   @db.ObjectId
+  food      MenuItem @relation(fields: [foodId], references: [id])
 }
 
-model Foods {
+model Category {
+  id        String     @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  menuItems MenuItem[]
+}
+
+model Menu {
+  id           String     @id @default(auto()) @map("_id") @db.ObjectId
+  name         String     // e.g., "Breakfast Menu", "Dinner Menu"
+  restaurantId String     @db.ObjectId
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  menuItems    MenuItem[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model MenuItem {
   id             String     @id @default(auto()) @map("_id") @db.ObjectId
   name           String
   description    String
-  price          Int
-  estimatedPrice Int?
-  category       String
+  price          Float
+  estimatedPrice Float?
+  categoryId     String?    @db.ObjectId
+  category       Category?  @relation(fields: [categoryId], references: [id])
+  menuId         String?    @db.ObjectId
+  menu           Menu?      @relation(fields: [menuId], references: [id])
   images         Images[]
   restaurantId   String     @db.ObjectId
   restaurant     Restaurant @relation(fields: [restaurantId], references: [id])
+  reviews        Reviews[]
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
-  Reviews        Reviews[]
+}
+
+model OperatingHours {
+  id           String     @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId String     @db.ObjectId
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  dayOfWeek    String     // e.g., "Monday", "Tuesday"
+  openTime     String     // e.g., "09:00"
+  closeTime    String     // e.g., "22:00"
+  isClosed     Boolean    @default(false) // For holidays or special closures
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 }
 
 model Restaurant {
-  id           String   @id @default(auto()) @map("_id") @db.ObjectId
-  name         String
-  country      String
-  city         String
-  address      String
-  email        String   @unique
-  phone_number Float    @unique
-  password     String
-  Foods        Foods[]
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String          @id @default(auto()) @map("_id") @db.ObjectId
+  name          String
+  country       String
+  city          String
+  address       String
+  email         String          @unique
+  phone_number  Float?
+  password      String
+  coordinates   GeoPoint?       // Geospatial coordinates
+  menus         Menu[]
+  menuItems     MenuItem[]
+  operatingHours OperatingHours[]
+  ownerId       String?         @db.ObjectId
+  owner         User?           @relation("RestaurantOwner", fields: [ownerId], references: [id])
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([email, phone_number], name: "unique_email_phone_number")
+  @@index([coordinates])
+}
+
+type GeoPoint {
+  type        String   @default("Point")
+  coordinates Float[] // [longitude, latitude]
 }

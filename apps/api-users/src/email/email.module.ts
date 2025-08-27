@@ -24,16 +24,16 @@ import { EjsAdapter } from '@nestjs-modules/mailer/dist/adapters/ejs.adapter';
         }, 1000);
         return {
           transport: transportConfig,
-          defaults: {
-            from: 'Becodemy',
+        defaults: {
+          from: 'Becodemy',
+        },
+        template: {
+          dir: join(__dirname, '../../../apps/api-users/email-templates'),
+          adapter: new EjsAdapter(),
+          options: {
+            strict: false,
           },
-          template: {
-            dir: join(__dirname, '../../../apps/api-users/email-templates'),
-            adapter: new EjsAdapter(),
-            options: {
-              strict: false,
-            },
-          },
+        },
         };
       },
       inject: [ConfigService],

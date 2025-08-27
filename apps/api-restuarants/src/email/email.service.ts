@@ -5,7 +5,7 @@ type mailOptions = {
   subject: string;
   email: string;
   name: string;
-  activation_token: string;
+  activationCode: string;
   template: string;
 };
 
@@ -16,7 +16,7 @@ export class EmailService {
     subject,
     email,
     name,
-    activation_token,
+    activationCode,
     template,
   }: mailOptions) {
     await this.mailService.sendMail({
@@ -25,7 +25,7 @@ export class EmailService {
       template,
       context: {
         name,
-        activation_token,
+        activationCode,
       },
     });
   }

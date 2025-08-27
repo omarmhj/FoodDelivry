@@ -1,5 +1,7 @@
-import { ObjectType, Field } from "@nestjs/graphql";
-import { Restaurant } from "../entities/restaurant.entities";
+import { Field, ObjectType } from '@nestjs/graphql';
+import { Restaurant } from '../entities/restaurant.entities';
+
+export { Restaurant }
 
 @ObjectType()
 export class ErrorType {
@@ -15,6 +17,9 @@ export class RegisterResponse {
   @Field()
   message: string;
 
+  @Field({ nullable: true })
+  activation_token?: string;
+
   @Field(() => ErrorType, { nullable: true })
   error?: ErrorType;
 }
@@ -22,7 +27,7 @@ export class RegisterResponse {
 @ObjectType()
 export class ActivationResponse {
   @Field(() => Restaurant)
-  restaurant: Restaurant | unknown;
+  restaurant: Restaurant;
 
   @Field(() => ErrorType, { nullable: true })
   error?: ErrorType;
@@ -31,7 +36,7 @@ export class ActivationResponse {
 @ObjectType()
 export class LoginResponse {
   @Field(() => Restaurant, { nullable: true })
-  restaurant?: Restaurant | any;
+  restaurant?: Restaurant;
 
   @Field({ nullable: true })
   accessToken?: string;
@@ -44,9 +49,16 @@ export class LoginResponse {
 }
 
 @ObjectType()
-export class LogoutResposne {
+export class LogoutResponse {
   @Field()
-  message?: string;
+  message: string;
 }
 
+@ObjectType()
+export class FindRestaurantsNearResponse {
+  @Field(() => [Restaurant])
+  restaurants: Restaurant[];
 
+  @Field(() => ErrorType, { nullable: true })
+  error?: ErrorType;
+}

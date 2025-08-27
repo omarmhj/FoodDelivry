@@ -2,11 +2,12 @@ import { Args, Context, Mutation, Resolver, Query } from "@nestjs/graphql";
 import { RestaurantService } from "./restaurant.service";
 import {
   ActivationResponse,
+  FindRestaurantsNearResponse,
   LoginResponse,
-  LogoutResposne,
+  LogoutResponse,
   RegisterResponse,
 } from "./types/restaurant.type";
-import { ActivationDto, RegisterDto } from "./dto/restaurant.dto";
+import { ActivationDto, FindRestaurantsNearDto, LoginDto, RegisterDto } from "./dto/restaurant.dto";
 import { Response, Request } from "express";
 import { UseGuards } from "@nestjs/common";
 import { AuthGuard } from "./guards/auth.guard";
@@ -20,11 +21,11 @@ export class RestaurantResolver {
     @Args("registerDto") registerDto: RegisterDto,
     @Context() context: { res: Response }
   ): Promise<RegisterResponse> {
-    const { message } = await this.restaurantService.registerRestaurant(
+    const { message, activation_token } = await this.restaurantService.registerRestaurant(
       registerDto,
       context.res
     );
-    return { message };
+    return { message, activation_token };
   }
 
   @Mutation(() => ActivationResponse)
@@ -40,23 +41,28 @@ export class RestaurantResolver {
 
   @Mutation(() => LoginResponse)
   async LoginRestaurant(
-    @Args("email") email: string,
-    @Args("password") password: string
-  ): Promise<LoginResponse> {
-    return await this.restaurantService.LoginRestuarant({ email, password });
+    @Args('loginDto') loginDto: LoginDto ): Promise<LoginResponse> {
+    return await this.restaurantService.LoginRestaurant(loginDto);
   }
 
   @Query(() => LoginResponse)
   @UseGuards(AuthGuard)
   async getLoggedInRestaurant(
-    @Context() context: { req: Request }
+    @Context() context: { req: any }
   ): Promise<LoginResponse> {
     return await this.restaurantService.getLoggedInRestaurant(context.req);
   }
 
-  @Query(() => LogoutResposne)
+  @Query(() => LogoutResponse)
   @UseGuards(AuthGuard)
-  async logOutRestaurant(@Context() context: { req: Request }) {
+  async logOutRestaurant(@Context() context: { req: any }) {
     return await this.restaurantService.Logout(context.req);
+  }
+
+  @Query(() => FindRestaurantsNearResponse)
+  async findRestaurantsNear(
+    @Args('findRestaurantsNearDto') findRestaurantsNearDto: FindRestaurantsNearDto,
+  ): Promise<FindRestaurantsNearResponse> {
+    return await this.restaurantService.findRestaurantsNear(findRestaurantsNearDto);
   }
 }

@@ -10,8 +10,8 @@ import { PrismaService } from "../prisma/prisma.service";
 import { EmailModule } from "./email/email.module";
 import { RestaurantService } from "./restaurant.service";
 import { RestaurantResolver } from "./restaurant.resolver";
-import { FoodsService } from "./foods/foods.service";
-import { FoodsResolver } from "./foods/foods.resolver";
+import { MenuItemService } from "./MenuItem/menu-item.service";
+import { MenuItemResolver } from "./MenuItem/menu-item.resolver";
 import { CloudinaryService } from "./cloudinary/cloudinary.service";
 import { CloudinaryModule } from "./cloudinary/cloudinary.module";
 
@@ -36,8 +36,8 @@ import { CloudinaryModule } from "./cloudinary/cloudinary.module";
     JwtService,
     PrismaService,
     RestaurantResolver,
-    FoodsService,
-    FoodsResolver,
+    MenuItemService,
+    MenuItemResolver,
     CloudinaryService,
   ],
 })

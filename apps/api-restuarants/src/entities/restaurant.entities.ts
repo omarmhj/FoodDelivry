@@ -1,8 +1,16 @@
-import { ObjectType, Field, Directive } from '@nestjs/graphql';
+import { ObjectType, Field, Directive, Float } from '@nestjs/graphql';
 
 @ObjectType()
-@Directive('@key(fields:"id")')
-export class Avatars {
+export class GeoPoint {
+  @Field()
+  type: string;
+
+  @Field(() => [Float])
+  coordinates: number[];
+}
+
+@ObjectType()
+export class Avatar {
   @Field()
   id: string;
 
@@ -13,13 +21,107 @@ export class Avatars {
   url: string;
 
   @Field()
-  sellerId: string;
+  restaurantId: string; // Updated from sellerId
 }
 
 @ObjectType()
+export class Menu {
+  @Field()
+  id: string;
+
+  @Field()
+  name: string;
+
+  @Field()
+  restaurantId: string;
+
+  @Field()
+  createdAt: Date;
+
+  @Field()
+  updatedAt: Date;
+}
+
+@ObjectType()
+export class MenuItem {
+  @Field()
+  id: string;
+
+  @Field()
+  name: string;
+
+  @Field()
+  description: string;
+
+  @Field()
+  price: number;
+
+  @Field({ nullable: true })
+  estimatedPrice?: number;
+
+  @Field({ nullable: true })
+  categoryId?: string;
+
+  @Field({ nullable: true })
+  menuId?: string;
+
+  @Field()
+  restaurantId: string;
+
+  @Field()
+  createdAt: Date;
+
+  @Field()
+  updatedAt: Date;
+}
+
+@ObjectType()
+export class OperatingHours {
+  @Field()
+  id: string;
+
+  @Field()
+  restaurantId: string;
+
+  @Field()
+  dayOfWeek: string;
+
+  @Field()
+  openTime: string;
+
+  @Field()
+  closeTime: string;
+
+  @Field()
+  isClosed: boolean;
+
+  @Field()
+  createdAt: Date;
+
+  @Field()
+  updatedAt: Date;
+}
+
+@ObjectType()
+export class User {
+  @Field()
+  id: string;
+
+  @Field()
+  name: string;
+
+  @Field()
+  email: string;
+
+  @Field()
+  role: string;
+}
+
+@ObjectType()
+@Directive('@key(fields: "id")')
 export class Restaurant {
   @Field()
-  id?: string;
+  id: string;
 
   @Field()
   name: string;
@@ -36,18 +138,30 @@ export class Restaurant {
   @Field()
   email: string;
 
-  @Field(() => Avatars, { nullable: true })
-  avatar?: Avatars | null;
+  @Field({ nullable: true })
+  phone_number?: number;
+
+  @Field({ nullable: true })
+  coordinates?: GeoPoint;
+
+  @Field({ nullable: true })
+  ownerId?: string;
+
+  @Field(() => User, { nullable: true })
+  owner?: User;
+
+  @Field(() => [Menu])
+  menus: Menu[];
+
+  @Field(() => [MenuItem])
+  menuItems: MenuItem[];
+
+  @Field(() => [OperatingHours])
+  operatingHours: OperatingHours[];
 
   @Field()
-  phone_number: number;
+  createdAt: Date;
 
   @Field()
-  password: string;
-
-  @Field()
-  createdAt?: Date;
-
-  @Field()
-  updatedAt?: Date;
+  updatedAt: Date;
 }

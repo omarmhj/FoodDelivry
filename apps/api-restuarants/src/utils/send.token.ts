@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { Restaurant } from '@prisma/client';
+import { LoginResponse, Restaurant } from '../types/restaurant.type';
+
 
 export class TokenSender {
   constructor(
@@ -8,26 +9,26 @@ export class TokenSender {
     private readonly jwt: JwtService,
   ) {}
 
-  public sendToken(restaurant: Restaurant) {
+  public sendToken(restaurant: Restaurant): LoginResponse {
     const accessToken = this.jwt.sign(
       {
-        id: restaurant.id,
+        id: restaurant.id, email: restaurant.email
       },
       {
-        secret: this.config.get<string>('ACCESS_TOKEN_SECRET'),
-        expiresIn: '1m',
+        secret: this.config.get<string>('JWT_SECRET_KEY'),
+        expiresIn: '15m',
       },
     );
 
     const refreshToken = this.jwt.sign(
       {
-        id: restaurant.id,
+        id: restaurant.id, email: restaurant.email
       },
       {
-        secret: this.config.get<string>('REFRESH_TOKEN_SECRET'),
-        expiresIn: '3d',
+        secret: this.config.get<string>('JWT_REFRESH_SECRET_KEY'),
+        expiresIn: '5d',
       },
     );
-    return { restaurant, accessToken, refreshToken };
+    return { restaurant, accessToken, refreshToken, error: null };
   }
 }
