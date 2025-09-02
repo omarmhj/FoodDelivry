@@ -79,6 +79,7 @@ model MenuItem {
   description    String
   price          Float
   estimatedPrice Float?
+  available      Boolean    @default(true)
   categoryId     String?    @db.ObjectId
   category       Category?  @relation(fields: [categoryId], references: [id])
   menuId         String?    @db.ObjectId
