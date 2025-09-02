@@ -61,4 +61,4 @@ export class FindRestaurantsNearResponse {
 
   @Field(() => ErrorType, { nullable: true })
   error?: ErrorType;
-}
+} 

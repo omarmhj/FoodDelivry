@@ -1,4 +1,7 @@
 import { ObjectType, Field, Directive, Float } from '@nestjs/graphql';
+import { MenuItem } from '../MenuItem/entities/menu-item.entities';
+
+export { MenuItem };
 
 @ObjectType()
 export class GeoPoint {
@@ -42,38 +45,7 @@ export class Menu {
   updatedAt: Date;
 }
 
-@ObjectType()
-export class MenuItem {
-  @Field()
-  id: string;
 
-  @Field()
-  name: string;
-
-  @Field()
-  description: string;
-
-  @Field()
-  price: number;
-
-  @Field({ nullable: true })
-  estimatedPrice?: number;
-
-  @Field({ nullable: true })
-  categoryId?: string;
-
-  @Field({ nullable: true })
-  menuId?: string;
-
-  @Field()
-  restaurantId: string;
-
-  @Field()
-  createdAt: Date;
-
-  @Field()
-  updatedAt: Date;
-}
 
 @ObjectType()
 export class OperatingHours {
