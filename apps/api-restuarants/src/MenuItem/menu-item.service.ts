@@ -1,6 +1,6 @@
 // apps/api-restaurants/src/foods/menu-item.service.ts
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '@/api-restuarants/prisma/prisma.service';
+import { Injectable, BadRequestException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from '../email/email.service';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
@@ -11,9 +11,10 @@ type MenuItem = {
   name: string;
   description: string;
   price: number;
-  estimatedPrice: number;
-  categoryId: string;
+  estimatedPrice?: number;
+  categoryId?: string;
   menuId?: string;
+  available?: boolean;
   images: Images[] | any;
 };
 
@@ -31,18 +32,16 @@ export class MenuItemService {
     const restaurantId = req.restaurant?.id;
 
     if (!restaurantId) {
-      throw new Error('Restaurant not authenticated');
+      throw new BadRequestException('Restaurant not authenticated');
     }
 
     let menuItemImages: Images[] = [];
-    for (const image of images) {
-      if (typeof image === 'string') {
-        const data = await this.cloudinaryService.upload(image);
-        menuItemImages.push({
-          public_id: data.public_id,
-          url: data.secure_url,
-        });
-      }
+    if (images && images.length > 0) {
+      const uploadResults = await this.cloudinaryService.uploadMultiple(images, 'menu-items');
+      menuItemImages = uploadResults.map(result => ({
+        public_id: result.public_id,
+        url: result.secure_url,
+      }));
     }
 
     const menuItemData = {
@@ -52,6 +51,7 @@ export class MenuItemService {
       estimatedPrice,
       categoryId,
       menuId,
+      available: true,
       images: {
         create: menuItemImages.map((image: { public_id: string; url: string }) => ({
           public_id: image.public_id,
@@ -88,9 +88,15 @@ export class MenuItemService {
     });
 
     if (!menuItem || menuItem.restaurant.id !== restaurantId) {
-      throw new Error('Only restaurant owner can delete menu item!');
+      throw new BadRequestException('Only restaurant owner can delete menu item!');
     }
 
+    // Delete associated images from Cloudinary and database
+    if (menuItem.images && menuItem.images.length > 0) {
+      const publicIds = menuItem.images.map(img => img.public_id);
+      await this.cloudinaryService.deleteMultipleImages(publicIds);
+    }
+    
     await this.prisma.images.deleteMany({
       where: { foodId: deleteMenuItemDto.id },
     });

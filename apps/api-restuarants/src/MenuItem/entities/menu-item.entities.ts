@@ -29,14 +29,17 @@ export class MenuItem {
   @Field({ nullable: true })
   estimatedPrice?: number;
 
+  @Field()
+  available: boolean;
+
   @Field({ nullable: true })
   categoryId?: string;
 
   @Field({ nullable: true })
   menuId?: string;
 
-  @Field(() => [Image])
-  images: Image[];
+  @Field(() => [Image], { nullable: true })
+  images?: Image[];
 
   @Field()
   restaurantId: string;

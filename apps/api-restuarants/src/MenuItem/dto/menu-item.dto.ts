@@ -30,6 +30,10 @@ export class CreateMenuItemDto {
   @IsOptional()
   menuId?: string;
 
+  @Field({ nullable: true })
+  @IsOptional()
+  available?: boolean;
+
   @Field(() => [String])
   @IsArray({ message: 'Menu item images must be an array.' })
   @ArrayNotEmpty({ message: 'Menu item images array must not be empty.' })
