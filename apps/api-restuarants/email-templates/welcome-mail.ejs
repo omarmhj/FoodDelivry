@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Welcome to SnackRapido!</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style type="text/css">
+    /* Base */
+    body {
+      margin: 0;
+      padding: 0;
+      min-width: 100%;
+      font-family: Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+      background-color: #fafafa;
+      color: #222222;
+    }
+
+    a {
+      color: #0070f3;
+      text-decoration: none;
+    }
+
+    /* Layout */
+    .email-wrapper {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .email-header {
+      background-color: #0070f3;
+      padding: 24px;
+      color: #ffffff;
+      text-align: center;
+    }
+
+    .email-body {
+      padding: 24px;
+      background-color: #ffffff;
+      text-align: center;
+    }
+
+    .email-footer {
+      background-color: #f6f6f6;
+      padding: 24px;
+      text-align: center;
+    }
+
+    /* Buttons */
+    .button {
+      display: inline-block;
+      background-color: #0070f3;
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: 700;
+      text-align: center;
+      text-decoration: none;
+      padding: 12px 24px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="email-wrapper">
+    <div class="email-header">
+      <h1>Welcome to SnackRapido!</h1>
+    </div>
+    <div class="email-body">
+      <p>Hi <%= name %>,</p>
+      <p>Congratulations! Your restaurant account has been successfully activated.</p>
+      <p>You can now start managing your restaurant, adding menu items, and serving customers through our platform.</p>
+      <a class="button" href="https://snackrapido.com/restaurant-dashboard">Go to Dashboard</a>
+      <p>If you have any questions, our support team is here to help!</p>
+    </div>
+    <div class="email-footer">
+      <p>Thank you for choosing SnackRapido!</p>
+      <p>If you have any questions, please don't hesitate to contact us at <a href="mailto:support@snackrapido.com">support@snackrapido.com</a></p>
+    </div>
+  </div>
+</body>
+
+</html>
