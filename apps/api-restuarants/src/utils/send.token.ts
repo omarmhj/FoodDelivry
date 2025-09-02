@@ -15,7 +15,7 @@ export class TokenSender {
         id: restaurant.id, email: restaurant.email
       },
       {
-        secret: this.config.get<string>('JWT_SECRET_KEY'),
+        secret: this.config.get<string>('ACCESS_TOKEN_SECRET'),
         expiresIn: '15m',
       },
     );
@@ -25,7 +25,7 @@ export class TokenSender {
         id: restaurant.id, email: restaurant.email
       },
       {
-        secret: this.config.get<string>('JWT_REFRESH_SECRET_KEY'),
+        secret: this.config.get<string>('REFRESH_TOKEN_SECRET'),
         expiresIn: '5d',
       },
     );

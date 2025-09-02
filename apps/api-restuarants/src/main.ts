@@ -20,5 +20,7 @@ async function bootstrap() {
   });
 
   await app.listen(4001);
+  console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | 🚀 Server running on http://localhost:4001');
+  console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | 📊 GraphQL Playground: http://localhost:4001/graphql');
 }
 bootstrap();
