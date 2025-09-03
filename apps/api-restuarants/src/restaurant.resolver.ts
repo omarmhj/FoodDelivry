@@ -31,6 +31,15 @@ import { Response, Request } from "express";
 import { UseGuards } from "@nestjs/common";
 import { AuthGuard } from "./guards/auth.guard";
 
+interface GraphQLContext {
+  req: Request & {
+    restaurant?: { id: string; email: string };
+    refreshtoken?: string;
+    accesstoken?: string;
+  };
+  res: Response;
+}
+
 @Resolver("Restaurant")
 export class RestaurantResolver {
   constructor(private readonly restaurantService: RestaurantService) {}
@@ -67,15 +76,15 @@ export class RestaurantResolver {
   @Query(() => LoginResponse)
   @UseGuards(AuthGuard)
   async getLoggedInRestaurant(
-    @Context() context: { req: any }
+    @Context() context: GraphQLContext
   ): Promise<LoginResponse> {
-    return await this.restaurantService.getLoggedInRestaurant(context.req);
+    return await this.restaurantService.getLoggedInRestaurant(context.req as any);
   }
 
   @Query(() => LogoutResponse)
   @UseGuards(AuthGuard)
   async logOutRestaurant(@Context() context: { req: any }) {
-    return await this.restaurantService.Logout(context.req);
+    return await this.restaurantService.Logout(context.req as any);
   }
 
   @Query(() => FindRestaurantsNearResponse)
@@ -91,30 +100,30 @@ export class RestaurantResolver {
   @UseGuards(AuthGuard)
   async createMenu(
     @Args('createMenuDto') createMenuDto: CreateMenuDto,
-    @Context() context: { req: any }
+    @Context() context: GraphQLContext
   ): Promise<LoginResponse> {
     console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | 📋 Handling CREATE MENU request');
-    return await this.restaurantService.createMenu(createMenuDto, context.req);
+    return await this.restaurantService.createMenu(createMenuDto, context.req as any as any);
   }
 
   @Mutation(() => LoginResponse)
   @UseGuards(AuthGuard)
   async updateMenu(
     @Args('updateMenuDto') updateMenuDto: UpdateMenuDto,
-    @Context() context: { req: any }
+    @Context() context: GraphQLContext
   ): Promise<LoginResponse> {
     console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | 📝 Handling UPDATE MENU request');
-    return await this.restaurantService.updateMenu(updateMenuDto, context.req);
+    return await this.restaurantService.updateMenu(updateMenuDto, context.req as any);
   }
 
   @Mutation(() => LoginResponse)
   @UseGuards(AuthGuard)
   async deleteMenu(
     @Args('deleteMenuDto') deleteMenuDto: DeleteMenuDto,
-    @Context() context: { req: any }
+    @Context() context: GraphQLContext
   ): Promise<LoginResponse> {
     console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | 🗑️ Handling DELETE MENU request');
-    return await this.restaurantService.deleteMenu(deleteMenuDto, context.req);
+    return await this.restaurantService.deleteMenu(deleteMenuDto, context.req as any);
   }
 
   // ==================== CATEGORY MANAGEMENT RESOLVERS ====================
@@ -123,30 +132,30 @@ export class RestaurantResolver {
   @UseGuards(AuthGuard)
   async createCategory(
     @Args('createCategoryDto') createCategoryDto: CreateCategoryDto,
-    @Context() context: { req: any }
+    @Context() context: GraphQLContext
   ): Promise<LoginResponse> {
     console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | 🏷️ Handling CREATE CATEGORY request');
-    return await this.restaurantService.createCategory(createCategoryDto, context.req);
+    return await this.restaurantService.createCategory(createCategoryDto, context.req as any);
   }
 
   @Mutation(() => LoginResponse)
   @UseGuards(AuthGuard)
   async updateCategory(
     @Args('updateCategoryDto') updateCategoryDto: UpdateCategoryDto,
-    @Context() context: { req: any }
+    @Context() context: GraphQLContext
   ): Promise<LoginResponse> {
     console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | ✏️ Handling UPDATE CATEGORY request');
-    return await this.restaurantService.updateCategory(updateCategoryDto, context.req);
+    return await this.restaurantService.updateCategory(updateCategoryDto, context.req as any);
   }
 
   @Mutation(() => LoginResponse)
   @UseGuards(AuthGuard)
   async deleteCategory(
     @Args('deleteCategoryDto') deleteCategoryDto: DeleteCategoryDto,
-    @Context() context: { req: any }
+    @Context() context: GraphQLContext
   ): Promise<LoginResponse> {
     console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | 🗑️ Handling DELETE CATEGORY request');
-    return await this.restaurantService.deleteCategory(deleteCategoryDto, context.req);
+    return await this.restaurantService.deleteCategory(deleteCategoryDto, context.req as any);
   }
 
   // ==================== MENU ITEM MANAGEMENT RESOLVERS ====================
@@ -155,30 +164,30 @@ export class RestaurantResolver {
   @UseGuards(AuthGuard)
   async createMenuItem(
     @Args('createMenuItemDto') createMenuItemDto: CreateMenuItemDto,
-    @Context() context: { req: any }
+    @Context() context: GraphQLContext
   ): Promise<LoginResponse> {
     console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | 🍽️ Handling CREATE MENU ITEM request');
-    return await this.restaurantService.createMenuItem(createMenuItemDto, context.req);
+    return await this.restaurantService.createMenuItem(createMenuItemDto, context.req as any);
   }
 
   @Mutation(() => LoginResponse)
   @UseGuards(AuthGuard)
   async updateMenuItem(
     @Args('updateMenuItemDto') updateMenuItemDto: UpdateMenuItemDto,
-    @Context() context: { req: any }
+    @Context() context: GraphQLContext
   ): Promise<LoginResponse> {
     console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | ✏️ Handling UPDATE MENU ITEM request');
-    return await this.restaurantService.updateMenuItem(updateMenuItemDto, context.req);
+    return await this.restaurantService.updateMenuItem(updateMenuItemDto, context.req as any);
   }
 
   @Mutation(() => LoginResponse)
   @UseGuards(AuthGuard)
   async deleteMenuItem(
     @Args('deleteMenuItemDto') deleteMenuItemDto: DeleteMenuItemDto,
-    @Context() context: { req: any }
+    @Context() context: GraphQLContext
   ): Promise<LoginResponse> {
     console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | 🗑️ Handling DELETE MENU ITEM request');
-    return await this.restaurantService.deleteMenuItem(deleteMenuItemDto, context.req);
+    return await this.restaurantService.deleteMenuItem(deleteMenuItemDto, context.req as any);
   }
 
   // ==================== OPERATING HOURS MANAGEMENT RESOLVERS ====================
@@ -187,30 +196,30 @@ export class RestaurantResolver {
   @UseGuards(AuthGuard)
   async createOperatingHours(
     @Args('createOperatingHoursDto') createOperatingHoursDto: CreateOperatingHoursDto,
-    @Context() context: { req: any }
+    @Context() context: GraphQLContext
   ): Promise<LoginResponse> {
     console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | 🕒 Handling CREATE OPERATING HOURS request');
-    return await this.restaurantService.createOperatingHours(createOperatingHoursDto, context.req);
+    return await this.restaurantService.createOperatingHours(createOperatingHoursDto, context.req as any);
   }
 
   @Mutation(() => LoginResponse)
   @UseGuards(AuthGuard)
   async updateOperatingHours(
     @Args('updateOperatingHoursDto') updateOperatingHoursDto: UpdateOperatingHoursDto,
-    @Context() context: { req: any }
+    @Context() context: GraphQLContext
   ): Promise<LoginResponse> {
     console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | ✏️ Handling UPDATE OPERATING HOURS request');
-    return await this.restaurantService.updateOperatingHours(updateOperatingHoursDto, context.req);
+    return await this.restaurantService.updateOperatingHours(updateOperatingHoursDto, context.req as any);
   }
 
   @Mutation(() => LoginResponse)
   @UseGuards(AuthGuard)
   async deleteOperatingHours(
     @Args('deleteOperatingHoursDto') deleteOperatingHoursDto: DeleteOperatingHoursDto,
-    @Context() context: { req: any }
+    @Context() context: GraphQLContext
   ): Promise<LoginResponse> {
     console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | 🗑️ Handling DELETE OPERATING HOURS request');
-    return await this.restaurantService.deleteOperatingHours(deleteOperatingHoursDto, context.req);
+    return await this.restaurantService.deleteOperatingHours(deleteOperatingHoursDto, context.req as any);
   }
 
   // ==================== STAFF MANAGEMENT RESOLVERS ====================
@@ -219,19 +228,19 @@ export class RestaurantResolver {
   @UseGuards(AuthGuard)
   async addStaffMember(
     @Args('addStaffMemberDto') addStaffMemberDto: AddStaffMemberDto,
-    @Context() context: { req: any }
+    @Context() context: GraphQLContext
   ): Promise<LoginResponse> {
     console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | 👥 Handling ADD STAFF MEMBER request');
-    return await this.restaurantService.addStaffMember(addStaffMemberDto, context.req);
+    return await this.restaurantService.addStaffMember(addStaffMemberDto, context.req as any);
   }
 
   @Mutation(() => LoginResponse)
   @UseGuards(AuthGuard)
   async removeStaffMember(
     @Args('removeStaffMemberDto') removeStaffMemberDto: RemoveStaffMemberDto,
-    @Context() context: { req: any }
+    @Context() context: GraphQLContext
   ): Promise<LoginResponse> {
     console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | 👋 Handling REMOVE STAFF MEMBER request');
-    return await this.restaurantService.removeStaffMember(removeStaffMemberDto, context.req);
+    return await this.restaurantService.removeStaffMember(removeStaffMemberDto, context.req as any);
   }
 }

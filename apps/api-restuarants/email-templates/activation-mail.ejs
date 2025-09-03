@@ -70,9 +70,11 @@
     </div>
     <div class="email-body">
       <p>Hi <%= name %>,</p>
-      <p>Please use the link below to activate your restaurant account:</p>
-      <a class="button" href="<%= activation_token %>">Activate Account</a>
-      <p>This link will expire in 5 minutes.</p>
+      <p>Please use the code below to activate your restaurant account:</p>
+      <div style="background-color: #f0f0f0; padding: 20px; margin: 20px 0; border-radius: 8px; font-size: 24px; font-weight: bold; letter-spacing: 2px; color: #0070f3;">
+        <%= activationCode %>
+      </div>
+      <p>This code will expire in 5 minutes.</p>
       <p>If you didn't create a restaurant account, please ignore this email.</p>
     </div>
     <div class="email-footer">

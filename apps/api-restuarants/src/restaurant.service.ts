@@ -3,7 +3,26 @@ import { JwtService, JwtVerifyOptions } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from './email/email.service';
-import { ActivationDto, LoginDto, RegisterDto, FindRestaurantsNearDto } from './dto/restaurant.dto';
+import { 
+  ActivationDto, 
+  LoginDto, 
+  RegisterDto, 
+  FindRestaurantsNearDto,
+  CreateMenuDto,
+  UpdateMenuDto,
+  DeleteMenuDto,
+  CreateCategoryDto,
+  UpdateCategoryDto,
+  DeleteCategoryDto,
+  CreateMenuItemDto,
+  UpdateMenuItemDto,
+  DeleteMenuItemDto,
+  CreateOperatingHoursDto,
+  UpdateOperatingHoursDto,
+  DeleteOperatingHoursDto,
+  AddStaffMemberDto,
+  RemoveStaffMemberDto
+} from './dto/restaurant.dto';
 import * as bcrypt from 'bcrypt';
 import { Response } from 'express';
 import { TokenSender } from './utils/send.token';
@@ -299,7 +318,7 @@ export class RestaurantService {
 
   // ==================== MENU MANAGEMENT ====================
   
-  async createMenu(createMenuDto: any, req: any) {
+  async createMenu(createMenuDto: CreateMenuDto, req: AuthenticatedRequest) {
     const { name } = createMenuDto;
     const restaurantId = req.restaurant?.id;
 
@@ -334,7 +353,7 @@ export class RestaurantService {
     };
   }
 
-  async updateMenu(updateMenuDto: any, req: any) {
+  async updateMenu(updateMenuDto: UpdateMenuDto, req: AuthenticatedRequest) {
     const { id, name } = updateMenuDto;
     const restaurantId = req.restaurant?.id;
 
@@ -375,7 +394,7 @@ export class RestaurantService {
     };
   }
 
-  async deleteMenu(deleteMenuDto: any, req: any) {
+  async deleteMenu(deleteMenuDto: DeleteMenuDto, req: AuthenticatedRequest) {
     const { id } = deleteMenuDto;
     const restaurantId = req.restaurant?.id;
 
@@ -423,7 +442,7 @@ export class RestaurantService {
 
   // ==================== CATEGORY MANAGEMENT ====================
   
-  async createCategory(createCategoryDto: any, req: any) {
+  async createCategory(createCategoryDto: CreateCategoryDto, req: AuthenticatedRequest) {
     const { name } = createCategoryDto;
     const restaurantId = req.restaurant?.id;
 
@@ -455,7 +474,7 @@ export class RestaurantService {
     };
   }
 
-  async updateCategory(updateCategoryDto: any, req: any) {
+  async updateCategory(updateCategoryDto: UpdateCategoryDto, req: AuthenticatedRequest) {
     const { id, name } = updateCategoryDto;
     const restaurantId = req.restaurant?.id;
 
@@ -496,7 +515,7 @@ export class RestaurantService {
     };
   }
 
-  async deleteCategory(deleteCategoryDto: any, req: any) {
+  async deleteCategory(deleteCategoryDto: DeleteCategoryDto, req: AuthenticatedRequest) {
     const { id } = deleteCategoryDto;
     const restaurantId = req.restaurant?.id;
 
@@ -547,7 +566,7 @@ export class RestaurantService {
 
   // ==================== MENU ITEM MANAGEMENT ====================
   
-  async createMenuItem(createMenuItemDto: any, req: any) {
+  async createMenuItem(createMenuItemDto: CreateMenuItemDto, req: AuthenticatedRequest) {
     const { name, description, price, estimatedPrice, categoryId, menuId, available } = createMenuItemDto;
     const restaurantId = req.restaurant?.id;
 
@@ -588,7 +607,7 @@ export class RestaurantService {
     };
   }
 
-  async updateMenuItem(updateMenuItemDto: any, req: any) {
+  async updateMenuItem(updateMenuItemDto: UpdateMenuItemDto, req: AuthenticatedRequest) {
     const { id, name, description, price, estimatedPrice, categoryId, menuId, available } = updateMenuItemDto;
     const restaurantId = req.restaurant?.id;
 
@@ -637,7 +656,7 @@ export class RestaurantService {
     };
   }
 
-  async deleteMenuItem(deleteMenuItemDto: any, req: any) {
+  async deleteMenuItem(deleteMenuItemDto: DeleteMenuItemDto, req: AuthenticatedRequest) {
     const { id } = deleteMenuItemDto;
     const restaurantId = req.restaurant?.id;
 
@@ -685,7 +704,7 @@ export class RestaurantService {
 
   // ==================== OPERATING HOURS MANAGEMENT ====================
   
-  async createOperatingHours(createOperatingHoursDto: any, req: any) {
+  async createOperatingHours(createOperatingHoursDto: CreateOperatingHoursDto, req: AuthenticatedRequest) {
     const { dayOfWeek, openTime, closeTime, isClosed } = createOperatingHoursDto;
     const restaurantId = req.restaurant?.id;
 
@@ -723,7 +742,7 @@ export class RestaurantService {
     };
   }
 
-  async updateOperatingHours(updateOperatingHoursDto: any, req: any) {
+  async updateOperatingHours(updateOperatingHoursDto: UpdateOperatingHoursDto, req: AuthenticatedRequest) {
     const { id, dayOfWeek, openTime, closeTime, isClosed } = updateOperatingHoursDto;
     const restaurantId = req.restaurant?.id;
 
@@ -769,7 +788,7 @@ export class RestaurantService {
     };
   }
 
-  async deleteOperatingHours(deleteOperatingHoursDto: any, req: any) {
+  async deleteOperatingHours(deleteOperatingHoursDto: DeleteOperatingHoursDto, req: AuthenticatedRequest) {
     const { id } = deleteOperatingHoursDto;
     const restaurantId = req.restaurant?.id;
 
@@ -811,7 +830,7 @@ export class RestaurantService {
 
   // ==================== STAFF MANAGEMENT ====================
   
-  async addStaffMember(addStaffMemberDto: any, req: any) {
+  async addStaffMember(addStaffMemberDto: AddStaffMemberDto, req: AuthenticatedRequest) {
     const { userId, role } = addStaffMemberDto;
     const restaurantId = req.restaurant?.id;
 
@@ -836,7 +855,7 @@ export class RestaurantService {
     if (user.role !== role) {
       await this.prisma.user.update({
         where: { id: userId },
-        data: { role },
+        data: { role: role as any },
       });
     }
 
@@ -860,7 +879,7 @@ export class RestaurantService {
     };
   }
 
-  async removeStaffMember(removeStaffMemberDto: any, req: any) {
+  async removeStaffMember(removeStaffMemberDto: RemoveStaffMemberDto, req: AuthenticatedRequest) {
     const { userId } = removeStaffMemberDto;
     const restaurantId = req.restaurant?.id;
 
@@ -880,7 +899,7 @@ export class RestaurantService {
     // Update user's role back to User
     await this.prisma.user.update({
       where: { id: userId },
-      data: { role: 'User' },
+      data: { role: 'User' as any },
     });
 
     const updatedRestaurant = await this.prisma.restaurant.findUnique({
