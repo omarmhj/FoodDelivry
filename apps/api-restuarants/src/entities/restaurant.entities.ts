@@ -28,6 +28,27 @@ export class Avatar {
 }
 
 @ObjectType()
+export class Category {
+  @Field()
+  id: string;
+
+  @Field()
+  name: string;
+
+  @Field({ nullable: true })
+  description?: string;
+
+  @Field({ nullable: true })
+  restaurantId?: string;
+
+  @Field({ nullable: true })
+  createdAt?: Date;
+
+  @Field({ nullable: true })
+  updatedAt?: Date;
+}
+
+@ObjectType()
 export class Menu {
   @Field()
   id: string;
@@ -35,6 +56,7 @@ export class Menu {
   @Field()
   name: string;
 
+ 
   @Field()
   restaurantId: string;
 
@@ -124,6 +146,9 @@ export class Restaurant {
 
   @Field(() => [Menu])
   menus: Menu[];
+
+  @Field(() => [Category])
+  categories: Category[];
 
   @Field(() => [MenuItem])
   menuItems: MenuItem[];

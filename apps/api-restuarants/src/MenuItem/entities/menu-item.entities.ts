@@ -1,4 +1,5 @@
 import { Field, ObjectType } from '@nestjs/graphql';
+import { Category, Menu } from '../../entities/restaurant.entities';
 
 @ObjectType()
 export class Image {
@@ -35,8 +36,14 @@ export class MenuItem {
   @Field({ nullable: true })
   categoryId?: string;
 
+  @Field(() => Category, { nullable: true })
+  category?: Category;
+
   @Field({ nullable: true })
   menuId?: string;
+
+  @Field(() => Menu, { nullable: true })
+  menu?: Menu;
 
   @Field(() => [Image], { nullable: true })
   images?: Image[];

@@ -121,7 +121,7 @@ export class RestaurantService {
         activationCode,
       },
       {
-        secret: this.configService.get<string>('ACCESS_TOKEN_SECRET'),
+        secret: this.configService.get<string>('JWT_SECRET_KEY'),
         expiresIn: '5m',
       },
     );
@@ -134,7 +134,7 @@ export class RestaurantService {
     const newRestaurant: { restaurant: Restaurant; activationCode: string; exp?: number } = this.jwtService.verify(
       activationToken,
       {
-        secret: this.configService.get<string>('ACCESS_TOKEN_SECRET'),
+        secret: this.configService.get<string>('JWT_SECRET_KEY'),
       } as JwtVerifyOptions,
     );
 
@@ -171,9 +171,12 @@ export class RestaurantService {
       },
       include: {
         menus: true,
+        categories: true,
         menuItems: {
           include: {
             images: true,
+            category: true,
+            menu: true,
           },
         },
         operatingHours: true,
@@ -191,9 +194,12 @@ export class RestaurantService {
       where: { email },
       include: {
         menus: true,
+        categories: true,
         menuItems: {
           include: {
             images: true,
+            category: true,
+            menu: true,
           },
         },
         operatingHours: true,
@@ -220,7 +226,7 @@ export class RestaurantService {
     return await bcrypt.compare(password, hashedPassword);
   }
 
- async getLoggedInRestaurant(req: AuthenticatedRequest) {
+  async getLoggedInRestaurant(req: AuthenticatedRequest) {
     const restaurantId = req.restaurant?.id;
 
     if (!restaurantId) {
@@ -231,9 +237,12 @@ export class RestaurantService {
       where: { id: restaurantId },
       include: {
         menus: true,
+        categories: true,
         menuItems: {
           include: {
             images: true,
+            category: true,
+            menu: true,
           },
         },
         operatingHours: true,
@@ -290,16 +299,17 @@ export class RestaurantService {
       rawRestaurants.map(async (raw) => {
         const restaurant = await this.prisma.restaurant.findUnique({
           where: { id: raw._id.toString() },
-          include: {
-            menus: true,
-            menuItems: {
-          include: {
-            images: true,
-          },
-        },
-            operatingHours: true,
-            owner: true,
-          },
+                include: {
+        menus: true,
+        categories: true,
+        menuItems: {
+      include: {
+        images: true,
+      },
+    },
+        operatingHours: true,
+        owner: true,
+      },
         });
         return restaurant;
       }),
@@ -337,9 +347,12 @@ export class RestaurantService {
       where: { id: restaurantId },
       include: {
         menus: true,
+        categories: true,
         menuItems: {
           include: {
             images: true,
+            category: true,
+            menu: true,
           },
         },
         operatingHours: true,
@@ -378,9 +391,12 @@ export class RestaurantService {
       where: { id: restaurantId },
       include: {
         menus: true,
+        categories: true,
         menuItems: {
           include: {
             images: true,
+            category: true,
+            menu: true,
           },
         },
         operatingHours: true,
@@ -410,12 +426,25 @@ export class RestaurantService {
       throw new BadRequestException('Menu not found or not owned by restaurant');
     }
 
-    // Delete all menu items in this menu first
+    // First, get all menu items in this menu
+    const menuItems = await this.prisma.menuItem.findMany({
+      where: { menuId: id },
+      select: { id: true }
+    });
+
+    // Delete all associated images first
+    for (const menuItem of menuItems) {
+      await this.prisma.images.deleteMany({
+        where: { foodId: menuItem.id },
+      });
+    }
+
+    // Then delete all menu items in this menu
     await this.prisma.menuItem.deleteMany({
       where: { menuId: id },
     });
 
-    // Then delete the menu
+    // Finally delete the menu
     await this.prisma.menu.delete({
       where: { id },
     });
@@ -424,9 +453,12 @@ export class RestaurantService {
       where: { id: restaurantId },
       include: {
         menus: true,
+        categories: true,
         menuItems: {
           include: {
             images: true,
+            category: true,
+            menu: true,
           },
         },
         operatingHours: true,
@@ -443,7 +475,7 @@ export class RestaurantService {
   // ==================== CATEGORY MANAGEMENT ====================
   
   async createCategory(createCategoryDto: CreateCategoryDto, req: AuthenticatedRequest) {
-    const { name } = createCategoryDto;
+    const { name, description } = createCategoryDto;
     const restaurantId = req.restaurant?.id;
 
     if (!restaurantId) {
@@ -451,22 +483,29 @@ export class RestaurantService {
     }
 
     const category = await this.prisma.category.create({
-      data: { name },
+      data: { 
+        name,
+        restaurantId,
+        description: description || null
+      } as any,
     });
 
     const restaurants = await this.prisma.restaurant.findMany({
       where: { id: restaurantId },
       include: {
         menus: true,
+        categories: true,
         menuItems: {
           include: {
             images: true,
+            category: true,
+            menu: true,
           },
         },
         operatingHours: true,
         owner: true,
       },
-    });
+    }); 
 
     return {
       message: 'Category created successfully',
@@ -499,9 +538,12 @@ export class RestaurantService {
       where: { id: restaurantId },
       include: {
         menus: true,
+        categories: true,
         menuItems: {
           include: {
             images: true,
+            category: true,
+            menu: true,
           },
         },
         operatingHours: true,
@@ -548,9 +590,12 @@ export class RestaurantService {
       where: { id: restaurantId },
       include: {
         menus: true,
+        categories: true,
         menuItems: {
           include: {
             images: true,
+            category: true,
+            menu: true,
           },
         },
         operatingHours: true,
@@ -567,11 +612,35 @@ export class RestaurantService {
   // ==================== MENU ITEM MANAGEMENT ====================
   
   async createMenuItem(createMenuItemDto: CreateMenuItemDto, req: AuthenticatedRequest) {
-    const { name, description, price, estimatedPrice, categoryId, menuId, available } = createMenuItemDto;
+    const { name, description, price, estimatedPrice, categoryId, menuId, available, images } = createMenuItemDto;
     const restaurantId = req.restaurant?.id;
 
     if (!restaurantId) {
       throw new BadRequestException('Restaurant not authenticated');
+    }
+
+    // Validate that the category belongs to this restaurant
+    const category = await this.prisma.category.findFirst({
+      where: { 
+        id: categoryId,
+        restaurantId: restaurantId
+      }
+    });
+
+    if (!category) {
+      throw new BadRequestException('Category not found or does not belong to this restaurant');
+    }
+
+    // Validate that the menu belongs to this restaurant
+    const menu = await this.prisma.menu.findFirst({
+      where: { 
+        id: menuId,
+        restaurantId: restaurantId
+      }
+    });
+
+    if (!menu) {
+      throw new BadRequestException('Menu not found or does not belong to this restaurant');
     }
 
     const menuItem = await this.prisma.menuItem.create({
@@ -584,6 +653,9 @@ export class RestaurantService {
         menuId,
         restaurantId,
         available: available ?? true,
+        images: images ? {
+          create: images.map(url => ({ public_id: '', url }))
+        } : undefined,
       },
     });
 
@@ -591,9 +663,12 @@ export class RestaurantService {
       where: { id: restaurantId },
       include: {
         menus: true,
+        categories: true,
         menuItems: {
           include: {
             images: true,
+            category: true,
+            menu: true,
           },
         },
         operatingHours: true,
@@ -623,6 +698,34 @@ export class RestaurantService {
       throw new BadRequestException('Menu item not found or not owned by restaurant');
     }
 
+    // Validate that the category belongs to this restaurant (if categoryId is provided)
+    if (categoryId) {
+      const category = await this.prisma.category.findFirst({
+        where: { 
+          id: categoryId,
+          restaurantId: restaurantId
+        }
+      });
+
+      if (!category) {
+        throw new BadRequestException('Category not found or does not belong to this restaurant');
+      }
+    }
+
+    // Validate that the menu belongs to this restaurant (if menuId is provided)
+    if (menuId) {
+      const menu = await this.prisma.menu.findFirst({
+        where: { 
+          id: menuId,
+          restaurantId: restaurantId
+        }
+      });
+
+      if (!menu) {
+        throw new BadRequestException('Menu not found or does not belong to this restaurant');
+      }
+    }
+
     await this.prisma.menuItem.update({
       where: { id },
       data: {
@@ -640,9 +743,12 @@ export class RestaurantService {
       where: { id: restaurantId },
       include: {
         menus: true,
+        categories: true,
         menuItems: {
           include: {
             images: true,
+            category: true,
+            menu: true,
           },
         },
         operatingHours: true,
@@ -686,9 +792,12 @@ export class RestaurantService {
       where: { id: restaurantId },
       include: {
         menus: true,
+        categories: true,
         menuItems: {
           include: {
             images: true,
+            category: true,
+            menu: true,
           },
         },
         operatingHours: true,
@@ -726,9 +835,12 @@ export class RestaurantService {
       where: { id: restaurantId },
       include: {
         menus: true,
+        categories: true,
         menuItems: {
           include: {
             images: true,
+            category: true,
+            menu: true,
           },
         },
         operatingHours: true,
@@ -772,9 +884,12 @@ export class RestaurantService {
       where: { id: restaurantId },
       include: {
         menus: true,
+        categories: true,
         menuItems: {
           include: {
             images: true,
+            category: true,
+            menu: true,
           },
         },
         operatingHours: true,
@@ -812,9 +927,12 @@ export class RestaurantService {
       where: { id: restaurantId },
       include: {
         menus: true,
+        categories: true,
         menuItems: {
           include: {
             images: true,
+            category: true,
+            menu: true,
           },
         },
         operatingHours: true,
@@ -863,9 +981,12 @@ export class RestaurantService {
       where: { id: restaurantId },
       include: {
         menus: true,
+        categories: true,
         menuItems: {
           include: {
             images: true,
+            category: true,
+            menu: true,
           },
         },
         operatingHours: true,
@@ -906,9 +1027,12 @@ export class RestaurantService {
       where: { id: restaurantId },
       include: {
         menus: true,
+        categories: true,
         menuItems: {
           include: {
             images: true,
+            category: true,
+            menu: true,
           },
         },
         operatingHours: true,

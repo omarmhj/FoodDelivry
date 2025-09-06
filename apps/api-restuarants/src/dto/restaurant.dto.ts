@@ -134,6 +134,11 @@ export class CreateCategoryDto {
   @IsNotEmpty({ message: 'Category name is required.' })
   @IsString({ message: 'Category name must be a string.' })
   name: string;
+
+  @Field()
+  @IsNotEmpty({ message: 'Category description is required.' })
+  @IsString({ message: 'Category description must be a string.' })
+  description: string;
 }
 
 @InputType()
@@ -147,6 +152,11 @@ export class UpdateCategoryDto {
   @IsNotEmpty({ message: 'Category name is required.' })
   @IsString({ message: 'Category name must be a string.' })
   name: string;
+
+  @Field()
+  @IsNotEmpty({ message: 'Category description is required.' })
+  @IsString({ message: 'Category description must be a string.' })
+  description: string;
 }
 
 @InputType()
@@ -193,6 +203,11 @@ export class CreateMenuItemDto {
   @Field({ nullable: true })
   @IsOptional()
   available?: boolean;
+
+  @Field(() => [String], { nullable: true })
+  @IsOptional()
+  @IsArray({ message: 'Menu item images must be an array.' })
+  images?: string[];
 }
 
 @InputType()

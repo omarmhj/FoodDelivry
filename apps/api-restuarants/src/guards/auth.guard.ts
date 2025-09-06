@@ -36,6 +36,9 @@ export class AuthGuard implements CanActivate {
       if (decoded?.exp * 1000 < Date.now()) {
         await this.updateAccessToken(req);
       }
+      
+      // Set restaurant info in request
+      req.restaurant = { id: decoded.id, email: decoded.email };
     }
 
     return true;
@@ -67,7 +70,7 @@ export class AuthGuard implements CanActivate {
         { id: restaurant.id },
         {
           secret: this.config.get<string>('ACCESS_TOKEN_SECRET'),
-          expiresIn: '1m',
+          expiresIn: '15m',
         },
       );
 

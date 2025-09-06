@@ -58,9 +58,14 @@ model Images {
 }
 
 model Category {
-  id        String     @id @default(auto()) @map("_id") @db.ObjectId
-  name      String
-  menuItems MenuItem[]
+  id           String     @id @default(auto()) @map("_id") @db.ObjectId
+  name         String
+  description  String?
+  restaurantId String?    @db.ObjectId
+  restaurant   Restaurant? @relation(fields: [restaurantId], references: [id])
+  menuItems    MenuItem[]
+  createdAt    DateTime?  @default(now())
+  updatedAt    DateTime?  @updatedAt
 }
 
 model Menu {
@@ -115,6 +120,7 @@ model Restaurant {
   password      String
   coordinates   GeoPoint?       // Geospatial coordinates
   menus         Menu[]
+  categories    Category[]
   menuItems     MenuItem[]
   operatingHours OperatingHours[]
   ownerId       String?         @db.ObjectId

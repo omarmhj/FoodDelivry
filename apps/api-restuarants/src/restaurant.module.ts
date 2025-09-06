@@ -11,7 +11,6 @@ import { EmailModule } from "./email/email.module";
 import { RestaurantService } from "./restaurant.service";
 import { RestaurantResolver } from "./restaurant.resolver";
 import { MenuItemService } from "./MenuItem/menu-item.service";
-import { MenuItemResolver } from "./MenuItem/menu-item.resolver";
 import { CloudinaryService } from "./cloudinary/cloudinary.service";
 import { CloudinaryModule } from "./cloudinary/cloudinary.module";
 
@@ -37,7 +36,6 @@ import { CloudinaryModule } from "./cloudinary/cloudinary.module";
     PrismaService,
     RestaurantResolver,
     MenuItemService,
-    MenuItemResolver,
     CloudinaryService,
   ],
 })
