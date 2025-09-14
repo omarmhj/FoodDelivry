@@ -3,6 +3,9 @@ import { JwtService, JwtVerifyOptions } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from './email/email.service';
+import { RabbitMQService } from '../../../libs/shared/src/rabbitmq.service';
+import { RedisService } from '../../../libs/shared/src/redis.service';
+import { MESSAGE_PATTERNS, REDIS_MESSAGE_PATTERNS, CACHE_KEYS } from '../../../libs/shared/src/message-patterns';
 import { 
   ActivationDto, 
   LoginDto, 
@@ -53,6 +56,8 @@ export class RestaurantService {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly emailService: EmailService,
+    private readonly rabbitMQService: RabbitMQService,
+    private readonly redisService: RedisService,
   ) {}
 
   async registerRestaurant(registerDto: RegisterDto, response: Response) {
@@ -184,28 +189,69 @@ export class RestaurantService {
       },
     });
 
+    // Emit restaurant created event via RabbitMQ
+    this.rabbitMQService.emitEvent(MESSAGE_PATTERNS.RESTAURANT_CREATED, {
+      id: restaurant.id,
+      timestamp: new Date(),
+      source: 'restaurant-service',
+      version: '1.0.0',
+      type: 'restaurant.created',
+      data: {
+        restaurantId: restaurant.id,
+        name: restaurant.name,
+        email: restaurant.email,
+        address: restaurant.address,
+        coordinates: restaurant.coordinates,
+      },
+    });
+
+
+    // Cache restaurant data
+    await this.redisService.set(
+      CACHE_KEYS.RESTAURANT(restaurant.id),
+      restaurant,
+      3600 // 1 hour cache
+    );
+
     return { restaurant, response };
   }
 
   async LoginRestaurant(loginDto: LoginDto): Promise<LoginResponse> {
     const { email, password } = loginDto;
 
-    const restaurant = await this.prisma.restaurant.findUnique({
-      where: { email },
-      include: {
-        menus: true,
-        categories: true,
-        menuItems: {
-          include: {
-            images: true,
-            category: true,
-            menu: true,
+    // Try to get restaurant from cache first
+    const cachedRestaurant = await this.redisService.getJson(CACHE_KEYS.RESTAURANT(email));
+    
+    let restaurant;
+    if (cachedRestaurant) {
+      restaurant = cachedRestaurant;
+    } else {
+      restaurant = await this.prisma.restaurant.findUnique({
+        where: { email },
+        include: {
+          menus: true,
+          categories: true,
+          menuItems: {
+            include: {
+              images: true,
+              category: true,
+              menu: true,
+            },
           },
+          operatingHours: true,
+          owner: true,
         },
-        operatingHours: true,
-        owner: true,
-      },
-    });
+      });
+
+      // Cache the restaurant data if found
+      if (restaurant) {
+        await this.redisService.set(
+          CACHE_KEYS.RESTAURANT(restaurant.id),
+          restaurant,
+          3600 // 1 hour cache
+        );
+      }
+    }
 
     if (restaurant && (await this.comparePassword(password, restaurant.password))) {
       const tokenSender = new TokenSender(this.configService, this.jwtService);

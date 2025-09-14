@@ -13,6 +13,7 @@ import { RestaurantResolver } from "./restaurant.resolver";
 import { MenuItemService } from "./MenuItem/menu-item.service";
 import { CloudinaryService } from "./cloudinary/cloudinary.service";
 import { CloudinaryModule } from "./cloudinary/cloudinary.module";
+import { SharedModule } from "../../../libs/shared/src/shared.module";
 
 @Module({
   imports: [
@@ -26,7 +27,8 @@ import { CloudinaryModule } from "./cloudinary/cloudinary.module";
       },
     }),
     EmailModule,
-    CloudinaryModule
+    CloudinaryModule,
+    SharedModule
   ],
   controllers: [],
   providers: [
