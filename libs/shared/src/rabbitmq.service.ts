@@ -19,7 +19,13 @@ export class RabbitMQService {
    * Emit an event to RabbitMQ
    */
   emitEvent<T = any>(pattern: string, data: T): void {
-    this.client.emit(pattern, data);
+    console.log(`🐰 RabbitMQ: Emitting event "${pattern}" with data:`, JSON.stringify(data, null, 2));
+    try {
+      this.client.emit(pattern, data);
+      console.log(`🐰 RabbitMQ: Event "${pattern}" emitted successfully`);
+    } catch (error) {
+      console.error(`🐰 RabbitMQ: Failed to emit event "${pattern}":`, error.message);
+    }
   }
 
   /**

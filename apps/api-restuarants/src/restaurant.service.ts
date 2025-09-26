@@ -190,28 +190,39 @@ export class RestaurantService {
     });
 
     // Emit restaurant created event via RabbitMQ
-    this.rabbitMQService.emitEvent(MESSAGE_PATTERNS.RESTAURANT_CREATED, {
-      id: restaurant.id,
-      timestamp: new Date(),
-      source: 'restaurant-service',
-      version: '1.0.0',
-      type: 'restaurant.created',
-      data: {
-        restaurantId: restaurant.id,
-        name: restaurant.name,
-        email: restaurant.email,
-        address: restaurant.address,
-        coordinates: restaurant.coordinates,
-      },
-    });
-
+    console.log('🐰 RABBITMQ: About to emit restaurant created event');
+    try {
+      this.rabbitMQService.emitEvent(MESSAGE_PATTERNS.RESTAURANT_CREATED, {
+        id: restaurant.id,
+        timestamp: new Date(),
+        source: 'restaurant-service',
+        version: '1.0.0',
+        type: 'restaurant.created',
+        data: {
+          restaurantId: restaurant.id,
+          name: restaurant.name,
+          email: restaurant.email,
+          address: restaurant.address,
+          coordinates: restaurant.coordinates,
+        },
+      });
+      console.log('🐰 RABBITMQ: Event emitted successfully');
+    } catch (error) {
+      console.error('🐰 RABBITMQ ERROR:', error.message);
+    }
 
     // Cache restaurant data
-    await this.redisService.set(
-      CACHE_KEYS.RESTAURANT(restaurant.id),
-      restaurant,
-      3600 // 1 hour cache
-    );
+    console.log('🔴 REDIS: About to cache restaurant data');
+    try {
+      await this.redisService.set(
+        CACHE_KEYS.RESTAURANT(restaurant.id),
+        restaurant,
+        3600 // 1 hour cache
+      );
+      console.log('🔴 REDIS: Restaurant cached successfully');
+    } catch (error) {
+      console.error('🔴 REDIS ERROR:', error.message);
+    }
 
     return { restaurant, response };
   }

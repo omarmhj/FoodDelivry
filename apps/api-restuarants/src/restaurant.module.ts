@@ -14,6 +14,7 @@ import { MenuItemService } from "./MenuItem/menu-item.service";
 import { CloudinaryService } from "./cloudinary/cloudinary.service";
 import { CloudinaryModule } from "./cloudinary/cloudinary.module";
 import { SharedModule } from "../../../libs/shared/src/shared.module";
+import { RedisModule } from "../../../libs/shared/src/redis.module";
 
 @Module({
   imports: [
@@ -28,7 +29,8 @@ import { SharedModule } from "../../../libs/shared/src/shared.module";
     }),
     EmailModule,
     CloudinaryModule,
-    SharedModule
+    SharedModule,
+    RedisModule
   ],
   controllers: [],
   providers: [

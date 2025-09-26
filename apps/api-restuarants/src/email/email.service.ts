@@ -25,7 +25,7 @@ export class EmailService {
     template,
   }: mailOptions) {
     try {
-      this.logger.log(`🍕 RESTAURANT SERVICE | 📧 Sending email to ${email}`);
+      this.logger.log(`📧 Sending email to ${email}`);
       
       await this.mailService.sendMail({
         to: email,
@@ -38,9 +38,9 @@ export class EmailService {
         },
       });
 
-      this.logger.log(`🍕 RESTAURANT SERVICE | ✅ Email sent successfully to ${email}`);
+      this.logger.log(`✅ Email sent successfully to ${email}`);
     } catch (error) {
-      this.logger.error(`🍕 RESTAURANT SERVICE | ❌ Failed to send email to ${email}:`, error);
+      this.logger.error(`❌ Failed to send email to ${email}:`, error.message);
       throw error;
     }
   }

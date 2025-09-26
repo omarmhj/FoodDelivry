@@ -11,10 +11,11 @@ import { EjsAdapter } from '@nestjs-modules/mailer/dist/adapters/ejs.adapter';
     MailerModule.forRootAsync({
       useFactory: async (config: ConfigService) => ({
         transport: {
-          host: config.get('SMTP_HOST'),
+          host: config.get('SMTP_HOST') || 'smtp.gmail.com',
+          port: parseInt(config.get('SMTP_PORT') || '465'),
           secure: true,
           auth: {
-            user: config.get('SMTP_MAIL'),
+            user: config.get('SMTP_MAIL')?.replace(/"/g, ''),
             pass: config.get('SMTP_PASSWORD'),
           },
         },

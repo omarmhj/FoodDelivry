@@ -15,14 +15,32 @@ export class RedisService {
     value: string | number | object,
     ttl?: number,
   ): Promise<'OK'> {
+    console.log(`🔴 REDIS SERVICE: Setting key "${key}" with TTL ${ttl}`);
+    console.log(`🔴 REDIS SERVICE: Value type: ${typeof value}`);
+    
     const serializedValue = typeof value === 'object' 
       ? JSON.stringify(value) 
       : String(value);
     
-    if (ttl) {
-      return this.redis.setex(key, ttl, serializedValue);
+    try {
+      let result;
+      if (ttl) {
+        result = await this.redis.setex(key, ttl, serializedValue);
+        console.log(`🔴 REDIS SERVICE: SETEX result:`, result);
+      } else {
+        result = await this.redis.set(key, serializedValue);
+        console.log(`🔴 REDIS SERVICE: SET result:`, result);
+      }
+      
+      // Verify the key was actually set
+      const verification = await this.redis.get(key);
+      console.log(`🔴 REDIS SERVICE: Verification - key "${key}" exists:`, !!verification);
+      
+      return result;
+    } catch (error) {
+      console.error(`🔴 REDIS SERVICE: Error setting key "${key}":`, error.message);
+      throw error;
     }
-    return this.redis.set(key, serializedValue);
   }
 
   /**
