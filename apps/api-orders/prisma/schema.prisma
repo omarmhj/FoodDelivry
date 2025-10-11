@@ -1,0 +1,168 @@
+// This is your Prisma schema file for Orders Service
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../node_modules/.prisma/orders-client"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// Order Status Enum
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+// Payment Status Enum  
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+// Delivery Type Enum
+enum DeliveryType {
+  PICKUP
+  DELIVERY
+  DINE_IN
+}
+
+// Main Order Model
+model Order {
+  id                    String         @id @default(auto()) @map("_id") @db.ObjectId
+  orderNumber           String         @unique // Human-readable order number
+  
+  // Customer Information
+  customerId            String         @db.ObjectId
+  customerName          String
+  customerEmail         String
+  customerPhone         String?
+  
+  // Restaurant Information  
+  restaurantId          String         @db.ObjectId
+  restaurantName        String
+  restaurantAddress     String
+  
+  // Order Details
+  items                 OrderItem[]
+  status                OrderStatus    @default(PENDING)
+  paymentStatus         PaymentStatus  @default(PENDING)
+  deliveryType          DeliveryType   @default(DELIVERY)
+  
+  // Pricing
+  subtotal              Float
+  tax                   Float          @default(0)
+  deliveryFee           Float          @default(0)
+  discount              Float          @default(0)
+  total                 Float
+  
+  // Delivery Information
+  deliveryAddress       String?
+  deliveryInstructions  String?
+  estimatedDeliveryTime DateTime?
+  actualDeliveryTime    DateTime?
+  
+  // Special Instructions
+  specialInstructions   String?
+  notes                 String?
+  
+  // Tracking
+  preparationTime       Int?           // in minutes
+  cookingStartedAt      DateTime?
+  readyAt               DateTime?
+  pickedUpAt            DateTime?
+  deliveredAt           DateTime?
+  
+  // Metadata
+  metadata              Json?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  
+  @@map("Order")
+}
+
+// Order Item Model
+model OrderItem {
+  id                    String   @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Order Reference
+  orderId               String   @db.ObjectId
+  order                 Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  // Menu Item Information
+  menuItemId            String   @db.ObjectId
+  menuItemName          String
+  menuItemDescription   String?
+  menuItemImage         String?
+  
+  // Order Details
+  quantity              Int      @default(1)
+  unitPrice             Float
+  totalPrice            Float    // quantity * unitPrice
+  
+  // Customizations
+  customizations        Json?    // Special requests, modifications
+  specialRequests       String?
+  
+  // Metadata
+  metadata              Json?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  @@map("OrderItem")
+}
+
+// Order History for tracking status changes
+model OrderStatusHistory {
+  id          String      @id @default(auto()) @map("_id") @db.ObjectId
+  orderId     String      @db.ObjectId
+  
+  status      OrderStatus
+  previousStatus OrderStatus?
+  reason      String?
+  notes       String?
+  
+  // Who made the change
+  changedBy   String?     // User ID or system
+  changedByRole String?   // CUSTOMER, RESTAURANT_STAFF, ADMIN, SYSTEM
+  
+  timestamp   DateTime    @default(now())
+  metadata    Json?
+  
+  @@map("OrderStatusHistory")
+}
+
+// Order Reviews (for future use)
+model OrderReview {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  orderId         String   @unique @db.ObjectId
+  customerId      String   @db.ObjectId
+  restaurantId    String   @db.ObjectId
+  
+  // Review Details
+  rating          Int      // 1-5 stars
+  comment         String?
+  foodQuality     Int?     // 1-5 stars
+  deliverySpeed   Int?     // 1-5 stars
+  customerService Int?     // 1-5 stars
+  
+  // Metadata
+  isPublic        Boolean  @default(true)
+  isVerified      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("OrderReview")
+}
+
+

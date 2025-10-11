@@ -63,3 +63,5 @@ db.orderItems.createIndex({ "menuItemId": 1 });
 print('SnackRapido database initialized successfully!');
 print('Collections created: users, restaurants, menus, categories, menuItems, images, operatingHours, orders, orderItems');
 print('Indexes created for optimal performance and geospatial queries');
+
+

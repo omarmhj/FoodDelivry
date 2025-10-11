@@ -1,0 +1,43 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { GraphQLModule } from '@nestjs/graphql';
+import { JwtService } from '@nestjs/jwt';
+import {
+  ApolloFederationDriver,
+  ApolloFederationDriverConfig,
+} from '@nestjs/apollo';
+import { PrismaService } from '../prisma/prisma.service';
+import { OrdersService } from './orders.service';
+import { OrdersResolver } from './orders.resolver';
+import { AuthGuard } from './guards/auth.guard';
+import { SharedModule } from '../../../libs/shared/src/shared.module';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: ['.env.local', '.env'],
+    }),
+    GraphQLModule.forRoot<ApolloFederationDriverConfig>({
+      driver: ApolloFederationDriver,
+      autoSchemaFile: {
+        federation: 2,
+      },
+      context: ({ req, res }) => ({ req, res }),
+    }),
+    SharedModule,
+  ],
+  controllers: [],
+  providers: [
+    OrdersService,
+    OrdersResolver,
+    PrismaService,
+    AuthGuard,
+    ConfigService,
+    JwtService,
+  ],
+  exports: [OrdersService, PrismaService],
+})
+export class OrdersModule {}
+
+

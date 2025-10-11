@@ -1,0 +1,545 @@
+import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { RabbitMQService } from '../../../libs/shared/src/rabbitmq.service';
+import { RedisService } from '../../../libs/shared/src/redis.service';
+import { MESSAGE_PATTERNS, CACHE_KEYS } from '../../../libs/shared/src/message-patterns';
+import {
+  CreateOrderDto,
+  UpdateOrderStatusDto,
+  CancelOrderDto,
+  GetOrdersFilterDto,
+  CreateOrderReviewDto,
+  OrderStatus,
+  PaymentStatus,
+  DeliveryType,
+} from './dto/order.dto';
+import {
+  OrderCalculation,
+  OrderEventData,
+  OrderValidationResult,
+  MenuItemValidation,
+} from './types/order.types';
+
+@Injectable()
+export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly rabbitMQService: RabbitMQService,
+    private readonly redisService: RedisService,
+  ) {}
+
+  /**
+   * Create a new order
+   */
+  async createOrder(createOrderDto: CreateOrderDto) {
+    this.logger.log(`📋 Creating order for customer: ${createOrderDto.customerName}`);
+
+    try {
+      // Validate order items
+      const validation = await this.validateOrderItems(createOrderDto.items);
+      if (!validation.isValid) {
+        throw new BadRequestException(`Order validation failed: ${validation.errors.join(', ')}`);
+      }
+
+      // Calculate order totals
+      const calculation = this.calculateOrderTotals(createOrderDto);
+      
+      // Generate unique order number
+      const orderNumber = await this.generateOrderNumber();
+
+      // Calculate estimated delivery time
+      const estimatedDeliveryTime = this.calculateEstimatedDeliveryTime(
+        createOrderDto.deliveryType,
+        createOrderDto.restaurantId
+      );
+
+      // Create order with items
+      const order = await this.prisma.order.create({
+        data: {
+          orderNumber,
+          customerId: createOrderDto.customerId,
+          customerName: createOrderDto.customerName,
+          customerEmail: createOrderDto.customerEmail,
+          customerPhone: createOrderDto.customerPhone,
+          restaurantId: createOrderDto.restaurantId,
+          restaurantName: createOrderDto.restaurantName,
+          restaurantAddress: createOrderDto.restaurantAddress,
+          status: OrderStatus.PENDING,
+          paymentStatus: PaymentStatus.PENDING,
+          deliveryType: createOrderDto.deliveryType,
+          subtotal: calculation.subtotal,
+          tax: calculation.tax,
+          deliveryFee: calculation.deliveryFee,
+          discount: calculation.discount,
+          total: calculation.total,
+          deliveryAddress: createOrderDto.deliveryAddress,
+          deliveryInstructions: createOrderDto.deliveryInstructions,
+          specialInstructions: createOrderDto.specialInstructions,
+          estimatedDeliveryTime,
+          items: {
+            create: createOrderDto.items.map(item => ({
+              menuItemId: item.menuItemId,
+              menuItemName: item.menuItemName,
+              menuItemDescription: item.menuItemDescription,
+              menuItemImage: item.menuItemImage,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              totalPrice: item.quantity * item.unitPrice,
+              specialRequests: item.specialRequests,
+              customizations: item.customizations,
+            })),
+          },
+        },
+        include: {
+          items: true,
+        },
+      });
+
+      // Create initial status history
+      await this.createStatusHistory(order.id, OrderStatus.PENDING, null, 'Order placed by customer');
+
+      // Cache order data
+      await this.cacheOrder(order);
+
+      // Publish order created event
+      await this.publishOrderEvent('order.placed', order);
+
+      this.logger.log(`✅ Order created successfully: ${orderNumber}`);
+
+      return {
+        message: 'Order placed successfully',
+        order,
+      };
+    } catch (error) {
+      this.logger.error(`❌ Failed to create order:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Update order status
+   */
+  async updateOrderStatus(updateStatusDto: UpdateOrderStatusDto) {
+    this.logger.log(`Updating order ${updateStatusDto.orderId} to status: ${updateStatusDto.status}`);
+
+    try {
+      const existingOrder = await this.prisma.order.findUnique({
+        where: { id: updateStatusDto.orderId },
+        include: { items: true },
+      });
+
+      if (!existingOrder) {
+        throw new NotFoundException('Order not found');
+      }
+
+      // Validate status transition
+      this.validateStatusTransition(existingOrder.status, updateStatusDto.status);
+
+      const previousStatus = existingOrder.status;
+      const updateData: any = {
+        status: updateStatusDto.status,
+        updatedAt: new Date(),
+      };
+
+      // Set timestamps based on status
+      switch (updateStatusDto.status) {
+        case OrderStatus.CONFIRMED:
+          updateData.cookingStartedAt = new Date();
+          break;
+        case OrderStatus.READY:
+          updateData.readyAt = new Date();
+          break;
+        case OrderStatus.OUT_FOR_DELIVERY:
+          updateData.pickedUpAt = new Date();
+          break;
+        case OrderStatus.DELIVERED:
+          updateData.deliveredAt = new Date();
+          updateData.actualDeliveryTime = new Date();
+          break;
+      }
+
+      // Update order
+      const updatedOrder = await this.prisma.order.update({
+        where: { id: updateStatusDto.orderId },
+        data: updateData,
+        include: { items: true },
+      });
+
+      // Create status history entry
+      await this.createStatusHistory(
+        updatedOrder.id,
+        updateStatusDto.status,
+        previousStatus,
+        updateStatusDto.reason,
+        updateStatusDto.changedBy,
+        updateStatusDto.changedByRole
+      );
+
+      // Update cache
+      await this.cacheOrder(updatedOrder);
+
+      // Publish status update event
+      await this.publishOrderEvent('order.status_updated', updatedOrder, previousStatus);
+
+      this.logger.log(`✅ Order status updated successfully: ${updatedOrder.orderNumber}`);
+
+      return {
+        message: 'Order status updated successfully',
+        order: updatedOrder,
+      };
+    } catch (error) {
+      this.logger.error(`❌ Failed to update order status:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Cancel order
+   */
+  async cancelOrder(cancelOrderDto: CancelOrderDto) {
+    this.logger.log(`❌ Cancelling order: ${cancelOrderDto.orderId}`);
+
+    try {
+      const existingOrder = await this.prisma.order.findUnique({
+        where: { id: cancelOrderDto.orderId },
+        include: { items: true },
+      });
+
+      if (!existingOrder) {
+        throw new NotFoundException('Order not found');
+      }
+
+      // Check if order can be cancelled
+      if (!this.canCancelOrder(existingOrder.status)) {
+        throw new BadRequestException(`Cannot cancel order with status: ${existingOrder.status}`);
+      }
+
+      const previousStatus = existingOrder.status;
+      
+      // Update order to cancelled
+      const cancelledOrder = await this.prisma.order.update({
+        where: { id: cancelOrderDto.orderId },
+        data: {
+          status: OrderStatus.CANCELLED,
+          notes: cancelOrderDto.reason,
+          updatedAt: new Date(),
+        },
+        include: { items: true },
+      });
+
+      // Create status history
+      await this.createStatusHistory(
+        cancelledOrder.id,
+        OrderStatus.CANCELLED,
+        previousStatus,
+        cancelOrderDto.reason || 'Order cancelled',
+        cancelOrderDto.cancelledBy
+      );
+
+      // Update cache
+      await this.cacheOrder(cancelledOrder);
+
+      // Publish cancellation event
+      await this.publishOrderEvent('order.cancelled', cancelledOrder, previousStatus);
+
+      this.logger.log(`✅ Order cancelled successfully: ${cancelledOrder.orderNumber}`);
+
+      return {
+        message: 'Order cancelled successfully',
+        order: cancelledOrder,
+      };
+    } catch (error) {
+      this.logger.error(`❌ Failed to cancel order:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Get orders with filtering
+   */
+  async getOrders(filterDto: GetOrdersFilterDto) {
+    this.logger.log(`📋 Getting orders with filters:`, filterDto);
+
+    try {
+      const where: any = {};
+      
+      if (filterDto.customerId) where.customerId = filterDto.customerId;
+      if (filterDto.restaurantId) where.restaurantId = filterDto.restaurantId;
+      if (filterDto.status) where.status = filterDto.status;
+      if (filterDto.deliveryType) where.deliveryType = filterDto.deliveryType;
+
+      const limit = filterDto.limit || 20;
+      const skip = filterDto.skip || 0;
+
+      const [orders, total] = await Promise.all([
+        this.prisma.order.findMany({
+          where,
+          include: { items: true },
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip,
+        }),
+        this.prisma.order.count({ where }),
+      ]);
+
+      return {
+        orders,
+        total,
+        limit,
+        skip,
+      };
+    } catch (error) {
+      this.logger.error(`❌ Failed to get orders:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Get single order by ID
+   */
+  async getOrderById(orderId: string) {
+    this.logger.log(`📋 Getting order by ID: ${orderId}`);
+
+    try {
+      // Try cache first
+      const cachedOrder = await this.getCachedOrder(orderId);
+      if (cachedOrder) {
+        this.logger.log(`🎯 Order found in cache: ${orderId}`);
+        return cachedOrder;
+      }
+
+      // Get from database
+      const order = await this.prisma.order.findUnique({
+        where: { id: orderId },
+        include: { items: true },
+      });
+
+      if (!order) {
+        throw new NotFoundException('Order not found');
+      }
+
+      // Cache the order
+      await this.cacheOrder(order);
+
+      return order;
+    } catch (error) {
+      this.logger.error(`❌ Failed to get order:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Create order review
+   */
+  async createOrderReview(reviewDto: CreateOrderReviewDto) {
+    this.logger.log(`⭐ Creating review for order: ${reviewDto.orderId}`);
+
+    try {
+      // Check if order exists and is delivered
+      const order = await this.prisma.order.findUnique({
+        where: { id: reviewDto.orderId },
+      });
+
+      if (!order) {
+        throw new NotFoundException('Order not found');
+      }
+
+      if (order.status !== OrderStatus.DELIVERED) {
+        throw new BadRequestException('Can only review delivered orders');
+      }
+
+      // Check if review already exists
+      const existingReview = await this.prisma.orderReview.findUnique({
+        where: { orderId: reviewDto.orderId },
+      });
+
+      if (existingReview) {
+        throw new BadRequestException('Order already reviewed');
+      }
+
+      // Create review
+      const review = await this.prisma.orderReview.create({
+        data: {
+          orderId: reviewDto.orderId,
+          customerId: reviewDto.customerId,
+          restaurantId: reviewDto.restaurantId,
+          rating: reviewDto.rating,
+          comment: reviewDto.comment,
+          foodQuality: reviewDto.foodQuality,
+          deliverySpeed: reviewDto.deliverySpeed,
+          customerService: reviewDto.customerService,
+          isPublic: true,
+          isVerified: false,
+        },
+      });
+
+      // Publish review created event
+      await this.rabbitMQService.emitEvent('order.reviewed', {
+        orderId: review.orderId,
+        restaurantId: review.restaurantId,
+        rating: review.rating,
+        timestamp: new Date(),
+      });
+
+      this.logger.log(`✅ Review created successfully for order: ${reviewDto.orderId}`);
+
+      return {
+        message: 'Review created successfully',
+        review,
+      };
+    } catch (error) {
+      this.logger.error(`❌ Failed to create review:`, error.message);
+      throw error;
+    }
+  }
+
+  // Private helper methods
+
+  private async validateOrderItems(items: any[]): Promise<OrderValidationResult> {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    if (!items || items.length === 0) {
+      errors.push('Order must contain at least one item');
+    }
+
+    if (items.length > 50) {
+      errors.push('Order cannot contain more than 50 items');
+    }
+
+    // Here you would validate against menu items from restaurant service
+    // For now, we'll do basic validation
+
+    for (const item of items) {
+      if (item.quantity <= 0) {
+        errors.push(`Invalid quantity for item: ${item.menuItemName}`);
+      }
+      if (item.unitPrice <= 0) {
+        errors.push(`Invalid price for item: ${item.menuItemName}`);
+      }
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors,
+      warnings,
+    };
+  }
+
+  private calculateOrderTotals(orderDto: CreateOrderDto): OrderCalculation {
+    const subtotal = orderDto.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+    const tax = orderDto.tax || (subtotal * 0.08); // 8% tax
+    const deliveryFee = orderDto.deliveryFee || (orderDto.deliveryType === DeliveryType.DELIVERY ? 5.99 : 0);
+    const discount = orderDto.discount || 0;
+    const total = subtotal + tax + deliveryFee - discount;
+
+    return { subtotal, tax, deliveryFee, discount, total };
+  }
+
+  private async generateOrderNumber(): Promise<string> {
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    return `ORD-${timestamp}-${random}`;
+  }
+
+  private calculateEstimatedDeliveryTime(deliveryType: DeliveryType, restaurantId: string): Date {
+    const now = new Date();
+    let minutes = 30; // Default preparation time
+
+    switch (deliveryType) {
+      case DeliveryType.PICKUP:
+        minutes = 20;
+        break;
+      case DeliveryType.DELIVERY:
+        minutes = 45;
+        break;
+      case DeliveryType.DINE_IN:
+        minutes = 25;
+        break;
+    }
+
+    return new Date(now.getTime() + minutes * 60000);
+  }
+
+  private validateStatusTransition(currentStatus: OrderStatus, newStatus: OrderStatus): void {
+    const validTransitions: Record<OrderStatus, OrderStatus[]> = {
+      [OrderStatus.PENDING]: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
+      [OrderStatus.CONFIRMED]: [OrderStatus.PREPARING, OrderStatus.CANCELLED],
+      [OrderStatus.PREPARING]: [OrderStatus.READY, OrderStatus.CANCELLED],
+      [OrderStatus.READY]: [OrderStatus.OUT_FOR_DELIVERY, OrderStatus.DELIVERED],
+      [OrderStatus.OUT_FOR_DELIVERY]: [OrderStatus.DELIVERED],
+      [OrderStatus.DELIVERED]: [], // Final state
+      [OrderStatus.CANCELLED]: [], // Final state
+    };
+
+    if (!validTransitions[currentStatus]?.includes(newStatus)) {
+      throw new BadRequestException(`Invalid status transition from ${currentStatus} to ${newStatus}`);
+    }
+  }
+
+  private canCancelOrder(status: OrderStatus): boolean {
+    return [OrderStatus.PENDING, OrderStatus.CONFIRMED, OrderStatus.PREPARING].includes(status);
+  }
+
+  private async createStatusHistory(
+    orderId: string,
+    status: OrderStatus,
+    previousStatus: OrderStatus | null,
+    reason?: string,
+    changedBy?: string,
+    changedByRole?: string
+  ): Promise<void> {
+    await this.prisma.orderStatusHistory.create({
+      data: {
+        orderId,
+        status,
+        previousStatus,
+        reason,
+        changedBy,
+        changedByRole,
+      },
+    });
+  }
+
+  private async cacheOrder(order: any): Promise<void> {
+    const cacheKey = CACHE_KEYS.ORDER(order.id);
+    await this.redisService.set(cacheKey, order, 3600); // Cache for 1 hour
+  }
+
+  private async getCachedOrder(orderId: string): Promise<any> {
+    const cacheKey = CACHE_KEYS.ORDER(orderId);
+    return this.redisService.getJson(cacheKey);
+  }
+
+  private async publishOrderEvent(eventType: string, order: any, previousStatus?: OrderStatus): Promise<void> {
+    const eventData: OrderEventData = {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      customerId: order.customerId,
+      restaurantId: order.restaurantId,
+      status: order.status,
+      previousStatus,
+      total: order.total,
+      items: order.items.map((item: any) => ({
+        menuItemId: item.menuItemId,
+        menuItemName: item.menuItemName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+      })),
+      deliveryType: order.deliveryType,
+      deliveryAddress: order.deliveryAddress,
+      timestamp: new Date(),
+      metadata: {
+        customerName: order.customerName,
+        customerEmail: order.customerEmail,
+        restaurantName: order.restaurantName,
+        estimatedDeliveryTime: order.estimatedDeliveryTime,
+      },
+    };
+
+    await this.rabbitMQService.emitEvent(eventType, eventData);
+  }
+}
+

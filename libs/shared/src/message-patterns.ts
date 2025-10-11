@@ -29,11 +29,18 @@ export const MESSAGE_PATTERNS = {
   CATEGORY_UPDATED: 'category.updated',
   CATEGORY_DELETED: 'category.deleted',
   
-  // Order Patterns (for future use)
+  // Order Patterns
   ORDER_CREATED: 'order.created',
-  ORDER_UPDATED: 'order.updated',
+  ORDER_PLACED: 'order.placed',
+  ORDER_CONFIRMED: 'order.confirmed',
+  ORDER_PREPARING: 'order.preparing',
+  ORDER_READY: 'order.ready',
+  ORDER_OUT_FOR_DELIVERY: 'order.out_for_delivery',
+  ORDER_DELIVERED: 'order.delivered',
   ORDER_CANCELLED: 'order.cancelled',
-  ORDER_COMPLETED: 'order.completed',
+  ORDER_STATUS_UPDATED: 'order.status_updated',
+  ORDER_REVIEWED: 'order.reviewed',
+  ORDER_PAYMENT_PROCESSED: 'order.payment_processed',
   
   // Notification Patterns
   SEND_EMAIL: 'notification.send_email',
@@ -102,6 +109,10 @@ export const CACHE_KEYS = {
   MENU: (id: string) => `menu:${id}`,
   MENU_ITEM: (id: string) => `menu_item:${id}`,
   CATEGORY: (id: string) => `category:${id}`,
+  ORDER: (id: string) => `order:${id}`,
+  ORDER_STATUS: (id: string) => `order_status:${id}`,
+  CUSTOMER_ORDERS: (customerId: string) => `customer_orders:${customerId}`,
+  RESTAURANT_ORDERS: (restaurantId: string) => `restaurant_orders:${restaurantId}`,
   RESTAURANTS_NEARBY: (lat: number, lng: number, radius: number) => 
     `restaurants:nearby:${lat}:${lng}:${radius}`,
   USER_SESSION: (userId: string) => `session:user:${userId}`,

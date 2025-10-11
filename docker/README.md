@@ -90,3 +90,5 @@ docker exec snackrapido-redis redis-cli ping
 # RabbitMQ
 docker exec snackrapido-rabbitmq rabbitmq-diagnostics ping
 ```
+
+
