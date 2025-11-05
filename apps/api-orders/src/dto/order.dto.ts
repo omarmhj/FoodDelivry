@@ -1,35 +1,15 @@
 import { InputType, Field, ObjectType, registerEnumType, Float, Int } from '@nestjs/graphql';
 import { IsNotEmpty, IsString, IsEmail, IsOptional, IsArray, IsEnum, IsNumber, Min, Max, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
+import { OrderStatus, PaymentStatus, DeliveryType } from '@prisma/orders-client';
 
-// Enums
-export enum OrderStatus {
-  PENDING = 'PENDING',
-  CONFIRMED = 'CONFIRMED',
-  PREPARING = 'PREPARING',
-  READY = 'READY',
-  OUT_FOR_DELIVERY = 'OUT_FOR_DELIVERY',
-  DELIVERED = 'DELIVERED',
-  CANCELLED = 'CANCELLED'
-}
-
-export enum PaymentStatus {
-  PENDING = 'PENDING',
-  PAID = 'PAID',
-  FAILED = 'FAILED',
-  REFUNDED = 'REFUNDED'
-}
-
-export enum DeliveryType {
-  PICKUP = 'PICKUP',
-  DELIVERY = 'DELIVERY',
-  DINE_IN = 'DINE_IN'
-}
-
-// Register enums with GraphQL
+// Register Prisma enums with GraphQL
 registerEnumType(OrderStatus, { name: 'OrderStatus' });
 registerEnumType(PaymentStatus, { name: 'PaymentStatus' });
 registerEnumType(DeliveryType, { name: 'DeliveryType' });
+
+// Re-export Prisma enums for convenience
+export { OrderStatus, PaymentStatus, DeliveryType };
 
 // Order Item Input DTO
 @InputType()
@@ -70,7 +50,7 @@ export class CreateOrderItemDto {
   @IsString({ message: 'Special requests must be a string.' })
   specialRequests?: string;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   @IsOptional()
   customizations?: any; // JSON field
 }
@@ -253,16 +233,6 @@ export class CreateOrderReviewDto {
   @IsNotEmpty({ message: 'Order ID is required.' })
   @IsString({ message: 'Order ID must be a string.' })
   orderId: string;
-
-  @Field()
-  @IsNotEmpty({ message: 'Customer ID is required.' })
-  @IsString({ message: 'Customer ID must be a string.' })
-  customerId: string;
-
-  @Field()
-  @IsNotEmpty({ message: 'Restaurant ID is required.' })
-  @IsString({ message: 'Restaurant ID must be a string.' })
-  restaurantId: string;
 
   @Field(() => Int)
   @IsNumber({}, { message: 'Rating must be a number.' })

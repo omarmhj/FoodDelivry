@@ -10,6 +10,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { EmailModule } from "./email/email.module";
 import { RestaurantService } from "./restaurant.service";
 import { RestaurantResolver } from "./restaurant.resolver";
+import { RestaurantController } from "./restaurant.controller";
 import { MenuItemService } from "./MenuItem/menu-item.service";
 import { CloudinaryService } from "./cloudinary/cloudinary.service";
 import { CloudinaryModule } from "./cloudinary/cloudinary.module";
@@ -32,7 +33,7 @@ import { RedisModule } from "../../../libs/shared/src/redis.module";
     SharedModule,
     RedisModule
   ],
-  controllers: [],
+  controllers: [RestaurantController],
   providers: [
     RestaurantService,
     ConfigService,

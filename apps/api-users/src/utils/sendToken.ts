@@ -12,20 +12,23 @@ export class TokenSender {
     const accessToken = this.jwt.sign(
       {
         id: user.id,
+        email: user.email,
+        role: user.role,
       },
       {
         secret: this.config.get<string>('ACCESS_TOKEN_SECRET'),
-        expiresIn: '1m',
+        expiresIn: '15m', // 15 minutes for testing (use 5m in production)
       },
     );
 
     const refreshToken = this.jwt.sign(
       {
         id: user.id,
+        email: user.email,
       },
       {
         secret: this.config.get<string>('REFRESH_TOKEN_SECRET'),
-        expiresIn: '3d',
+        expiresIn: '7d', // 7 days
       },
     );
     return { user, accessToken, refreshToken };

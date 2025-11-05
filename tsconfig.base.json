@@ -15,7 +15,8 @@
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./apps/*"]
+      "@/*": ["./apps/*"],
+      "@prisma/orders-client": ["./node_modules/.prisma/orders-client"]
     }
   },
   "exclude": ["node_modules", "tmp"]

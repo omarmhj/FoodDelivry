@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService, JwtVerifyOptions } from '@nestjs/jwt';
 import {
@@ -23,6 +23,8 @@ interface UserData {
 
 @Injectable() 
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
@@ -75,13 +77,18 @@ export class UsersService {
 
     const activation_token = activationToken.token;
 
-    await this.emailService.sendMail({
-      email,
-      subject: 'Activate your account!',
-      template: './activation-mail',
-      name,
-      activationCode,
-    });
+    try {
+      await this.emailService.sendMail({
+        email,
+        subject: 'Activate your account!',
+        template: './activation-mail',
+        name,
+        activationCode,
+      });
+      this.logger.log(`✅ Activation email sent to ${email}`);
+    } catch (error) {
+      this.logger.warn(`⚠️ Failed to send email, but user registration continues. Code: ${activationCode}`);
+    }
 
     return { activation_token, response };
   }
@@ -260,5 +267,68 @@ export class UsersService {
   // get all users service
   async getUsers() {
     return this.prisma.user.findMany({});
+  }
+
+  // Validate user for Orders Service (RabbitMQ handler)
+  async validateUser(data: { userId: string }) {
+    this.logger.log(`🔍 Validating user: ${data.userId}`);
+    
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: data.userId },
+      });
+
+      if (!user) {
+        return {
+          isValid: false,
+          error: 'User not found',
+        };
+      }
+
+      const response = {
+        isValid: true,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          phone_number: user.phone_number,
+        },
+      };
+      return response;
+    } catch (error) {
+      this.logger.error(`❌ User validation failed: ${error.message}`);
+      return {
+        isValid: false,
+        error: 'Validation failed',
+      };
+    }
+  }
+
+  // Get user by ID (RabbitMQ handler)
+  async getUserById(data: { userId: string }) {
+    this.logger.log(`📋 Getting user by ID: ${data.userId}`);
+    
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: data.userId },
+      });
+
+      if (!user) {
+        return { user: null, error: 'User not found' };
+      }
+
+      return {
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          phone_number: user.phone_number,
+          role: user.role,
+        },
+      };
+    } catch (error) {
+      this.logger.error(`❌ Get user failed: ${error.message}`);
+      return { user: null, error: 'Failed to get user' };
+    }
   }
 }

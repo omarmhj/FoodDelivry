@@ -16,10 +16,9 @@ async function bootstrap() {
   try {
     const app = await NestFactory.create(OrdersModule);
     const configService = app.get(ConfigService);
-    const prismaService = app.get(PrismaService);
 
-    // Enable shutdown hooks
-    await prismaService.enableShutdownHooks(app);
+    // Enable shutdown hooks for graceful shutdown
+    app.enableShutdownHooks();
 
     // Global validation pipe
     app.useGlobalPipes(

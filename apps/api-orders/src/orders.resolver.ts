@@ -1,5 +1,5 @@
 import { Resolver, Mutation, Query, Args, Context } from '@nestjs/graphql';
-import { UseGuards, Logger } from '@nestjs/common';
+import { UseGuards, Logger, ForbiddenException } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import {
   CreateOrderDto,
@@ -7,6 +7,7 @@ import {
   CancelOrderDto,
   GetOrdersFilterDto,
   CreateOrderReviewDto,
+  OrderStatus,
 } from './dto/order.dto';
 import {
   Order,
@@ -17,6 +18,11 @@ import {
   CreateOrderReviewResponse,
 } from './entities/order.entities';
 import { AuthGuard } from './guards/auth.guard';
+import type { 
+  Order as PrismaOrder, 
+  OrderItem as PrismaOrderItem,
+  OrderReview as PrismaOrderReview
+} from '@prisma/orders-client';
 
 @Resolver('Order')
 export class OrdersResolver {
@@ -28,7 +34,7 @@ export class OrdersResolver {
   @UseGuards(AuthGuard)
   async createOrder(
     @Args('createOrderDto') createOrderDto: CreateOrderDto,
-    @Context() context: any,
+    @Context() context: Record<string, unknown>,
   ): Promise<CreateOrderResponse> {
     try {
       this.logger.log(`📋 Creating order for customer: ${createOrderDto.customerName}`);
@@ -37,15 +43,22 @@ export class OrdersResolver {
       
       return {
         message: result.message,
-        order: result.order,
+        order: result.order as unknown as Order,
+        error: null,
       };
     } catch (error) {
-      this.logger.error(`❌ Failed to create order:`, error.message);
+      const errorMessage = error?.message || error?.error?.message || 'Unknown error occurred';
+      const errorCode = error?.code || error?.error?.code || 'CREATE_ORDER_FAILED';
+      
+      this.logger.error(`❌ Failed to create order:`, errorMessage);
+      this.logger.error(`Error details:`, error);
+      
       return {
         message: 'Failed to create order',
+        order: null,
         error: {
-          message: error.message,
-          code: error.code || 'CREATE_ORDER_FAILED',
+          message: errorMessage,
+          code: errorCode,
         },
       };
     }
@@ -55,16 +68,37 @@ export class OrdersResolver {
   @UseGuards(AuthGuard)
   async updateOrderStatus(
     @Args('updateStatusDto') updateStatusDto: UpdateOrderStatusDto,
-    @Context() context: any,
+    @Context() context: Record<string, unknown>,
   ): Promise<UpdateOrderStatusResponse> {
     try {
       this.logger.log(`🔄 Updating order status: ${updateStatusDto.orderId} -> ${updateStatusDto.status}`);
       
-      const result = await this.ordersService.updateOrderStatus(updateStatusDto);
+      // Extract authenticated user/restaurant from context
+      const req = context.req as any;
+      if (req?.user && !updateStatusDto.changedBy) {
+        // Auto-populate changedBy from authenticated user
+        updateStatusDto.changedBy = req.user.id;
+        if (!updateStatusDto.changedByRole) {
+          // Map user roles to order change roles
+          if (req.user.role === 'Admin') {
+            updateStatusDto.changedByRole = 'ADMIN';
+          } else {
+            updateStatusDto.changedByRole = 'CUSTOMER'; // Default for User role
+          }
+        }
+      } else if (req?.restaurant && !updateStatusDto.changedBy) {
+        // Auto-populate changedBy from authenticated restaurant
+        updateStatusDto.changedBy = req.restaurant.id;
+        if (!updateStatusDto.changedByRole) {
+          updateStatusDto.changedByRole = 'RESTAURANT';
+        }
+      }
+      
+      const result = await this.ordersService.updateOrderStatus(updateStatusDto, context);
       
       return {
         message: result.message,
-        order: result.order,
+        order: result.order as unknown as Order,
       };
     } catch (error) {
       this.logger.error(`❌ Failed to update order status:`, error.message);
@@ -82,16 +116,26 @@ export class OrdersResolver {
   @UseGuards(AuthGuard)
   async cancelOrder(
     @Args('cancelOrderDto') cancelOrderDto: CancelOrderDto,
-    @Context() context: any,
+    @Context() context: Record<string, unknown>,
   ): Promise<CancelOrderResponse> {
     try {
       this.logger.log(`❌ Cancelling order: ${cancelOrderDto.orderId}`);
       
-      const result = await this.ordersService.cancelOrder(cancelOrderDto);
+      // Extract authenticated user/restaurant from context
+      const req = context.req as any;
+      if (req?.user && !cancelOrderDto.cancelledBy) {
+        // Auto-populate cancelledBy from authenticated user
+        cancelOrderDto.cancelledBy = req.user.id;
+      } else if (req?.restaurant && !cancelOrderDto.cancelledBy) {
+        // Auto-populate cancelledBy from authenticated restaurant
+        cancelOrderDto.cancelledBy = req.restaurant.id;
+      }
+      
+      const result = await this.ordersService.cancelOrder(cancelOrderDto, context);
       
       return {
         message: result.message,
-        order: result.order,
+        order: result.order as unknown as Order,
       };
     } catch (error) {
       this.logger.error(`❌ Failed to cancel order:`, error.message);
@@ -109,7 +153,7 @@ export class OrdersResolver {
   @UseGuards(AuthGuard)
   async getOrders(
     @Args('filterDto', { nullable: true }) filterDto?: GetOrdersFilterDto,
-    @Context() context?: any,
+    @Context() context?: Record<string, unknown>,
   ): Promise<GetOrdersResponse> {
     try {
       this.logger.log(`📋 Getting orders with filters:`, filterDto);
@@ -117,7 +161,7 @@ export class OrdersResolver {
       const result = await this.ordersService.getOrders(filterDto || {});
       
       return {
-        orders: result.orders,
+        orders: result.orders as unknown as Order[],
         total: result.total,
         limit: result.limit,
         skip: result.skip,
@@ -141,12 +185,13 @@ export class OrdersResolver {
   @UseGuards(AuthGuard)
   async getOrderById(
     @Args('orderId') orderId: string,
-    @Context() context: any,
+    @Context() context: Record<string, unknown>,
   ): Promise<Order> {
     try {
       this.logger.log(`📋 Getting order by ID: ${orderId}`);
       
-      return await this.ordersService.getOrderById(orderId);
+      const order = await this.ordersService.getOrderById(orderId);
+      return order as unknown as Order;
     } catch (error) {
       this.logger.error(`❌ Failed to get order:`, error.message);
       throw error;
@@ -157,7 +202,7 @@ export class OrdersResolver {
   @UseGuards(AuthGuard)
   async getOrderByNumber(
     @Args('orderNumber') orderNumber: string,
-    @Context() context: any,
+    @Context() context: Record<string, unknown>,
   ): Promise<Order> {
     try {
       this.logger.log(`📋 Getting order by number: ${orderNumber}`);
@@ -177,7 +222,7 @@ export class OrdersResolver {
     @Args('customerId') customerId: string,
     @Args('limit', { nullable: true }) limit?: number,
     @Args('skip', { nullable: true }) skip?: number,
-    @Context() context?: any,
+    @Context() context?: Record<string, unknown>,
   ): Promise<GetOrdersResponse> {
     try {
       this.logger.log(`📋 Getting orders for customer: ${customerId}`);
@@ -191,7 +236,7 @@ export class OrdersResolver {
       const result = await this.ordersService.getOrders(filterDto);
       
       return {
-        orders: result.orders,
+        orders: result.orders as unknown as Order[],
         total: result.total,
         limit: result.limit,
         skip: result.skip,
@@ -217,7 +262,7 @@ export class OrdersResolver {
     @Args('restaurantId') restaurantId: string,
     @Args('limit', { nullable: true }) limit?: number,
     @Args('skip', { nullable: true }) skip?: number,
-    @Context() context?: any,
+    @Context() context?: Record<string, unknown>,
   ): Promise<GetOrdersResponse> {
     try {
       this.logger.log(`📋 Getting orders for restaurant: ${restaurantId}`);
@@ -231,7 +276,7 @@ export class OrdersResolver {
       const result = await this.ordersService.getOrders(filterDto);
       
       return {
-        orders: result.orders,
+        orders: result.orders as unknown as Order[],
         total: result.total,
         limit: result.limit,
         skip: result.skip,
@@ -255,16 +300,23 @@ export class OrdersResolver {
   @UseGuards(AuthGuard)
   async createOrderReview(
     @Args('reviewDto') reviewDto: CreateOrderReviewDto,
-    @Context() context: any,
+    @Context() context: Record<string, unknown>,
   ): Promise<CreateOrderReviewResponse> {
     try {
       this.logger.log(`⭐ Creating review for order: ${reviewDto.orderId}`);
       
-      const result = await this.ordersService.createOrderReview(reviewDto);
+      const req = context.req as any;
+      const authUser = req?.user;
+
+      if (!authUser) {
+        throw new ForbiddenException('Authentication required to create a review');
+      }
+
+      const result = await this.ordersService.createOrderReview(reviewDto, authUser);
       
       return {
         message: result.message,
-        review: result.review,
+        review: result.review as unknown as PrismaOrderReview,
       };
     } catch (error) {
       this.logger.error(`❌ Failed to create order review:`, error.message);
@@ -284,7 +336,7 @@ export class OrdersResolver {
   @UseGuards(AuthGuard)
   async getActiveOrders(
     @Args('restaurantId', { nullable: true }) restaurantId?: string,
-    @Context() context?: any,
+    @Context() context?: Record<string, unknown>,
   ): Promise<Order[]> {
     try {
       this.logger.log(`🔥 Getting active orders${restaurantId ? ` for restaurant: ${restaurantId}` : ''}`);
@@ -298,9 +350,11 @@ export class OrdersResolver {
       const result = await this.ordersService.getOrders(filterDto);
       
       // Filter for active orders only
-      return result.orders.filter(order => 
-        !['DELIVERED', 'CANCELLED'].includes(order.status)
+      const activeOrders = result.orders.filter((order: PrismaOrder & { items: PrismaOrderItem[] }) => 
+        order.status !== OrderStatus.DELIVERED && order.status !== OrderStatus.CANCELLED
       );
+      
+      return activeOrders as unknown as Order[];
     } catch (error) {
       this.logger.error(`❌ Failed to get active orders:`, error.message);
       throw error;
@@ -311,7 +365,7 @@ export class OrdersResolver {
   @UseGuards(AuthGuard)
   async getOrdersReadyForPickup(
     @Args('restaurantId') restaurantId: string,
-    @Context() context: any,
+    @Context() context: Record<string, unknown>,
   ): Promise<Order[]> {
     try {
       this.logger.log(`🍽️ Getting orders ready for pickup for restaurant: ${restaurantId}`);
@@ -324,7 +378,11 @@ export class OrdersResolver {
       const result = await this.ordersService.getOrders(filterDto);
       
       // Filter for ready orders only
-      return result.orders.filter(order => order.status === 'READY');
+      const readyOrders = result.orders.filter((order: PrismaOrder & { items: PrismaOrderItem[] }) => 
+        order.status === OrderStatus.READY
+      );
+      
+      return readyOrders as unknown as Order[];
     } catch (error) {
       this.logger.error(`❌ Failed to get ready orders:`, error.message);
       throw error;

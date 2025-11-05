@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { JwtService, JwtVerifyOptions } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
@@ -51,6 +51,8 @@ interface AuthenticatedRequest extends Request {
 
 @Injectable()
 export class RestaurantService {
+  private readonly logger = new Logger(RestaurantService.name);
+
   constructor(
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
@@ -1101,5 +1103,100 @@ export class RestaurantService {
       message: 'Staff member removed successfully',
       restaurant: updatedRestaurant,
     };
+  }
+
+  // Validate restaurant for Orders Service (RabbitMQ handler)
+  async validateRestaurant(data: { restaurantId: string }) {
+    this.logger.log(`🔍 Validating restaurant: ${data.restaurantId}`);
+    
+    try {
+      const restaurant = await this.prisma.restaurant.findUnique({
+        where: { id: data.restaurantId },
+      });
+
+      if (!restaurant) {
+        return {
+          isValid: false,
+          error: 'Restaurant not found',
+        };
+      }
+
+      const response = {
+        isValid: true,
+        restaurant: {
+          id: restaurant.id,
+          name: restaurant.name,
+          email: restaurant.email,
+          address: restaurant.address,
+        },
+      };
+      return response;
+    } catch (error) {
+      this.logger.error(`❌ Restaurant validation failed: ${error.message}`);
+      return {
+        isValid: false,
+        error: 'Validation failed',
+      };
+    }
+  }
+
+  // Validate menu items for Orders Service (RabbitMQ handler)
+  async validateMenuItems(data: { restaurantId: string; items: Array<{ menuItemId: string; quantity: number }> }) {
+    this.logger.log(`🔍 Validating menu items for restaurant: ${data.restaurantId}`);
+    
+    try {
+      const restaurant = await this.prisma.restaurant.findUnique({
+        where: { id: data.restaurantId },
+        include: {
+          menuItems: true,
+        },
+      });
+
+      if (!restaurant) {
+        return {
+          isValid: false,
+          error: 'Restaurant not found',
+        };
+      }
+
+      const validItems = [];
+      const errors = [];
+
+      for (const item of data.items) {
+        const menuItem = restaurant.menuItems.find(mi => mi.id === item.menuItemId);
+        
+        if (!menuItem) {
+          errors.push(`Menu item ${item.menuItemId} not found`);
+          continue;
+        }
+
+        if (item.quantity <= 0) {
+          errors.push(`Invalid quantity for menu item ${menuItem.name}`);
+          continue;
+        }
+
+        validItems.push(menuItem);
+      }
+
+      if (errors.length > 0) {
+        return {
+          isValid: false,
+          error: errors.join(', '),
+          validItems: [],
+        };
+      }
+
+      return {
+        isValid: true,
+        validItems,
+      };
+    } catch (error) {
+      this.logger.error(`❌ Menu items validation failed: ${error.message}`);
+      return {
+        isValid: false,
+        error: 'Validation failed',
+        validItems: [],
+      };
+    }
   }
 }

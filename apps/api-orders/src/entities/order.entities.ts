@@ -1,6 +1,5 @@
 import { ObjectType, Field, Float, Int } from '@nestjs/graphql';
 import { OrderStatus, PaymentStatus, DeliveryType } from '../dto/order.dto';
-
 @ObjectType()
 export class OrderItem {
   @Field()
@@ -33,10 +32,10 @@ export class OrderItem {
   @Field({ nullable: true })
   specialRequests?: string;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   customizations?: any;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   metadata?: any;
 
   @Field()
@@ -80,6 +79,9 @@ export class Order {
   // Order Details
   @Field(() => [OrderItem])
   items: OrderItem[];
+
+  @Field(() => [OrderStatusHistory], { nullable: true })
+  statusHistory?: OrderStatusHistory[];
 
   @Field(() => OrderStatus)
   status: OrderStatus;
@@ -143,7 +145,7 @@ export class Order {
   deliveredAt?: Date;
 
   // Metadata
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   metadata?: any;
 
   @Field()
@@ -182,7 +184,7 @@ export class OrderStatusHistory {
   @Field()
   timestamp: Date;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   metadata?: any;
 }
 
@@ -231,8 +233,8 @@ export class OrderReview {
 // Response Types
 @ObjectType()
 export class ErrorType {
-  @Field()
-  message: string;
+  @Field({ nullable: true })
+  message?: string;
 
   @Field({ nullable: true })
   code?: string;

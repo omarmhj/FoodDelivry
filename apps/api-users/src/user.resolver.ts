@@ -87,4 +87,13 @@ export class UsersResolver {
   async getUsers() {
     return this.userService.getUsers();
   }
+
+  @Query(() => User)
+  async getUserById(@Args('userId') userId: string) {
+    const result = await this.userService.getUserById({ userId });
+    if (!result.user) {
+      throw new BadRequestException(result.error || 'User not found');
+    }
+    return result.user;
+  }
 }

@@ -65,3 +65,10 @@ print('Collections created: users, restaurants, menus, categories, menuItems, im
 print('Indexes created for optimal performance and geospatial queries');
 
 
+
+
+
+
+
+
+

@@ -92,3 +92,10 @@ docker exec snackrapido-rabbitmq rabbitmq-diagnostics ping
 ```
 
 
+
+
+
+
+
+
+

@@ -9,12 +9,15 @@ import { JwtService } from '@nestjs/jwt';
 import { UsersResolver } from './user.resolver';
 import { EmailModule } from './email/email.module';
 import { UsersService } from './user.service';
-import {PrismaService} from "../prisma/prisma.service";
+import { UsersController } from './user.controller';
+import { PrismaService } from '../prisma/prisma.service';
+import { SharedModule } from '../../../libs/shared/src/shared.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: ['.env.local', '.env'],
     }),
     GraphQLModule.forRoot<ApolloFederationDriverConfig>({
       driver: ApolloFederationDriver,
@@ -23,8 +26,9 @@ import {PrismaService} from "../prisma/prisma.service";
       },
     }),
     EmailModule,
+    SharedModule,
   ],
-  controllers: [],
+  controllers: [UsersController],
   providers: [
     UsersService,
     ConfigService,
