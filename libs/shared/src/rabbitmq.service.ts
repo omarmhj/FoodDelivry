@@ -5,7 +5,10 @@ import { Observable, timeout } from 'rxjs';
 @Injectable()
 export class RabbitMQService {
   constructor(
-    @Inject('RABBITMQ_SERVICE') private readonly client: ClientProxy,
+    @Inject('RABBITMQ_SERVICE')
+    private readonly client: ClientProxy,
+    @Inject('NOTIFICATIONS_SERVICE')
+    private readonly notificationsClient: ClientProxy,
   ) {}
 
   /**
@@ -19,7 +22,21 @@ export class RabbitMQService {
    * Emit an event to RabbitMQ
    */
   emitEvent<T = any>(pattern: string, data: T): void {
-    this.client.emit(pattern, data);
+    try {
+      console.log(`🐰 RabbitMQ: Emitting event "${pattern}" to notifications_queue`);
+      console.log(`📤 Event data:`, JSON.stringify(data, null, 2));
+      
+      if (!this.notificationsClient) {
+        console.error(`❌ RabbitMQ: notificationsClient is not initialized!`);
+        return;
+      }
+      
+      this.notificationsClient.emit(pattern, data);
+      console.log(`✅ Event "${pattern}" emitted successfully`);
+    } catch (error) {
+      console.error(`❌ RabbitMQ: Failed to emit event "${pattern}":`, error);
+      console.error(`❌ Error details:`, error.message);
+    }
   }
 
   /**

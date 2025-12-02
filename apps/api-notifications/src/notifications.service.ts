@@ -233,32 +233,41 @@ export class NotificationsService {
         },
       });
 
-      // Send email notification
+      // Send email notification (non-blocking)
       if (data.metadata?.customerEmail) {
-        await this.sendEmailNotification({
-          to: data.metadata.customerEmail,
-          subject: `Order Confirmation - ${data.orderNumber}`,
-          content: this.generateOrderConfirmationEmail(data),
-          userId: data.customerId,
-          type: NotificationType.ORDER_UPDATE,
-        });
+        try {
+          await this.sendEmailNotification({
+            to: data.metadata.customerEmail,
+            subject: `Order Confirmation - ${data.orderNumber}`,
+            content: this.generateOrderConfirmationEmail(data),
+            userId: data.customerId,
+            type: NotificationType.ORDER_UPDATE,
+          });
+        } catch (emailError) {
+          this.logger.warn(`⚠️ Email notification failed but continuing: ${emailError.message}`);
+        }
       }
 
-      // Send push notification
-      await this.sendPushNotification({
-        userId: data.customerId,
-        type: NotificationType.ORDER_UPDATE,
-        title: 'Order Placed',
-        message: `Your order #${data.orderNumber} has been placed successfully!`,
-        data: {
-          orderId: data.orderId,
-          orderNumber: data.orderNumber,
-        },
-      });
+      // Send push notification (non-blocking)
+      try {
+        await this.sendPushNotification({
+          userId: data.customerId,
+          type: NotificationType.ORDER_UPDATE,
+          title: 'Order Placed',
+          message: `Your order #${data.orderNumber} has been placed successfully!`,
+          data: {
+            orderId: data.orderId,
+            orderNumber: data.orderNumber,
+          },
+        });
+      } catch (pushError) {
+        this.logger.warn(`⚠️ Push notification failed but continuing: ${pushError.message}`);
+      }
 
-      this.logger.log(`✅ Order placed notifications sent for order: ${data.orderNumber}`);
+      this.logger.log(`✅ Order placed notifications processed for order: ${data.orderNumber}`);
     } catch (error) {
       this.logger.error(`❌ Failed to handle order placed event:`, error.message);
+      throw error;
     }
   }
 
@@ -283,33 +292,42 @@ export class NotificationsService {
         },
       });
 
-      // Send email notification for important status changes
+      // Send email notification for important status changes (non-blocking)
       if (data.customerEmail && this.isImportantStatus(data.status)) {
-        await this.sendEmailNotification({
-          to: data.customerEmail,
-          subject: `Order Update - ${data.orderNumber}`,
-          content: this.generateOrderStatusEmail(data),
-          userId: data.customerId,
-          type: NotificationType.ORDER_UPDATE,
-        });
+        try {
+          await this.sendEmailNotification({
+            to: data.customerEmail,
+            subject: `Order Update - ${data.orderNumber}`,
+            content: this.generateOrderStatusEmail(data),
+            userId: data.customerId,
+            type: NotificationType.ORDER_UPDATE,
+          });
+        } catch (emailError) {
+          this.logger.warn(`⚠️ Email notification failed but continuing: ${emailError.message}`);
+        }
       }
 
-      // Send push notification
-      await this.sendPushNotification({
-        userId: data.customerId,
-        type: NotificationType.ORDER_UPDATE,
-        title: 'Order Update',
-        message: `Your order #${data.orderNumber} is ${this.getStatusLabel(data.status).toLowerCase()}!`,
-        data: {
-          orderId: data.orderId,
-          orderNumber: data.orderNumber,
-          status: data.status,
-        },
-      });
+      // Send push notification (non-blocking)
+      try {
+        await this.sendPushNotification({
+          userId: data.customerId,
+          type: NotificationType.ORDER_UPDATE,
+          title: 'Order Update',
+          message: `Your order #${data.orderNumber} is ${this.getStatusLabel(data.status).toLowerCase()}!`,
+          data: {
+            orderId: data.orderId,
+            orderNumber: data.orderNumber,
+            status: data.status,
+          },
+        });
+      } catch (pushError) {
+        this.logger.warn(`⚠️ Push notification failed but continuing: ${pushError.message}`);
+      }
 
-      this.logger.log(`✅ Order status update notifications sent for order: ${data.orderNumber}`);
+      this.logger.log(`✅ Order status update notifications processed for order: ${data.orderNumber}`);
     } catch (error) {
       this.logger.error(`❌ Failed to handle order status updated event:`, error.message);
+      throw error;
     }
   }
 

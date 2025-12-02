@@ -6,64 +6,73 @@ import { NotificationsService } from './notifications.service';
 export class NotificationsController {
   private readonly logger = new Logger(NotificationsController.name);
 
-  constructor(private readonly notificationsService: NotificationsService) {}
+constructor(private readonly notificationsService: NotificationsService) {
+    this.logger.log('📧 NotificationsController initialized');
+    this.logger.log('📧 Listening for events:');
+    this.logger.log('   - order.placed');
+    this.logger.log('   - order.status.updated');
+    this.logger.log('   - order.reviewed');
+    this.logger.log('   - order.cancelled');
+  }
 
   /**
    * Listen to order.placed event
    */
-  @EventPattern('order.placed')
+@EventPattern('order.placed')
   async handleOrderPlaced(@Payload() data: any) {
-    this.logger.log(`📦 Received order.placed event`);
-    this.logger.log(`📦 Event data: ${JSON.stringify(data, null, 2)}`);
-    try {
-      await this.notificationsService.handleOrderPlaced(data);
-      this.logger.log(`✅ Successfully processed order.placed event`);
-    } catch (error) {
-      this.logger.error(`❌ Error handling order.placed event:`, error.message);
-      this.logger.error(`❌ Error stack:`, error.stack);
-    }
+    const timestamp = new Date().toISOString();
+    this.logger.log(`📦 [${timestamp}] Received order.placed event`);
+    this.logger.log(`📦 Order Number: ${data.orderNumber || 'N/A'}`);
+    this.logger.log(`📦 Order ID: ${data.orderId || 'N/A'}`);
+    
+    this.notificationsService.handleOrderPlaced(data)
+      .catch(error => this.logger.error(`❌ Error handling order.placed:`, error.message));
+    
+    this.logger.log(`✅ Accepted order.placed event for order: ${data.orderNumber}`);
   }
 
   /**
    * Listen to order.status.updated event
    */
-  @EventPattern('order.status.updated')
+@EventPattern('order.status.updated')
   async handleOrderStatusUpdated(@Payload() data: any) {
-    this.logger.log(`🔄 Received order.status.updated event: ${JSON.stringify(data)}`);
-    try {
-      await this.notificationsService.handleOrderStatusUpdated(data);
-    } catch (error) {
-      this.logger.error(`❌ Error handling order.status.updated event:`, error.message);
-    }
+    this.logger.log(`🔄 Received order.status.updated event: ${data.orderNumber}`);
+    
+    this.notificationsService.handleOrderStatusUpdated(data)
+      .catch(error => this.logger.error(`❌ Error handling order.status.updated:`, error.message));
+    
+    this.logger.log(`✅ Accepted order.status.updated event`);
   }
 
   /**
    * Listen to order.reviewed event
    */
-  @EventPattern('order.reviewed')
+@EventPattern('order.reviewed')
   async handleOrderReviewed(@Payload() data: any) {
-    this.logger.log(`⭐ Received order.reviewed event: ${JSON.stringify(data)}`);
-    try {
-      await this.notificationsService.handleOrderReviewed(data);
-    } catch (error) {
-      this.logger.error(`❌ Error handling order.reviewed event:`, error.message);
-    }
+    this.logger.log(`⭐ Received order.reviewed event`);
+    
+    this.notificationsService.handleOrderReviewed(data)
+      .catch(error => this.logger.error(`❌ Error handling order.reviewed:`, error.message));
+    
+    this.logger.log(`✅ Accepted order.reviewed event`);
   }
 
-  /**
+/**
    * Listen to order.cancelled event
    */
-  @EventPattern('order.cancelled')
+@EventPattern('order.cancelled')
   async handleOrderCancelled(@Payload() data: any) {
-    this.logger.log(`❌ Received order.cancelled event: ${JSON.stringify(data)}`);
-    try {
-      await this.notificationsService.handleOrderStatusUpdated({
-        ...data,
-        status: 'CANCELLED',
-      });
-    } catch (error) {
-      this.logger.error(`❌ Error handling order.cancelled event:`, error.message);
-    }
+    const timestamp = new Date().toISOString();
+    this.logger.log(`❌ [${timestamp}] Received order.cancelled event`);
+    this.logger.log(`❌ Order Number: ${data.orderNumber || 'N/A'}`);
+    
+    this.notificationsService.handleOrderStatusUpdated({
+      ...data,
+      status: 'CANCELLED',
+      customerEmail: data.metadata?.customerEmail,
+    }).catch(error => this.logger.error(`❌ Error handling order.cancelled:`, error.message));
+    
+    this.logger.log(`✅ Accepted order.cancelled event for order: ${data.orderNumber}`);
   }
 }
 

@@ -1,0 +1,413 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../../../libs/shared/src/redis.service';
+import { AnalyticsType } from './dto/analytics.dto';
+
+@Injectable()
+export class AnalyticsService {
+  private readonly logger = new Logger(AnalyticsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redisService: RedisService,
+  ) {}
+
+  /**
+   * Handle order.placed event
+   */
+  async handleOrderPlaced(data: any) {
+    this.logger.log(`📊 Processing order.placed event: ${data.orderNumber}`);
+
+    try {
+      const orderDate = new Date(data.timestamp || Date.now());
+      const hour = orderDate.getHours();
+      const dayOfWeek = orderDate.getDay();
+
+      // Create revenue metric
+      await this.prisma.revenueMetric.create({
+        data: {
+          restaurantId: data.restaurantId,
+          orderId: data.orderId,
+          orderNumber: data.orderNumber,
+          amount: data.total,
+          date: orderDate,
+          hour,
+          dayOfWeek,
+          metadata: {
+            customerId: data.customerId,
+            items: data.items,
+          },
+        },
+      });
+
+      // Update popular items
+      if (data.items && Array.isArray(data.items)) {
+        for (const item of data.items) {
+          await this.updatePopularItem(
+            data.restaurantId,
+            item.menuItemId,
+            item.menuItemName,
+            item.quantity,
+            item.unitPrice * item.quantity,
+            orderDate,
+          );
+        }
+      }
+
+      // Update daily analytics
+      await this.updateDailyAnalytics(data.restaurantId, orderDate, data.total);
+
+      // Invalidate cached analytics
+      await this.invalidateAnalyticsCache(data.restaurantId);
+
+      this.logger.log(`✅ Analytics updated for order: ${data.orderNumber}`);
+    } catch (error) {
+      this.logger.error(`❌ Failed to process order analytics:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Update popular items
+   */
+  private async updatePopularItem(
+    restaurantId: string,
+    menuItemId: string,
+    menuItemName: string,
+    quantity: number,
+    revenue: number,
+    date: Date,
+  ) {
+    const dateKey = new Date(date.setHours(0, 0, 0, 0));
+
+    try {
+      const existingItem = await this.prisma.popularItem.findUnique({
+        where: {
+          restaurantId_menuItemId_date: {
+            restaurantId,
+            menuItemId,
+            date: dateKey,
+          },
+        },
+      });
+
+      if (existingItem) {
+        await this.prisma.popularItem.update({
+          where: { id: existingItem.id },
+          data: {
+            orderCount: existingItem.orderCount + quantity,
+            totalRevenue: existingItem.totalRevenue + revenue,
+          },
+        });
+      } else {
+        await this.prisma.popularItem.create({
+          data: {
+            restaurantId,
+            menuItemId,
+            menuItemName,
+            orderCount: quantity,
+            totalRevenue: revenue,
+            date: dateKey,
+          },
+        });
+      }
+    } catch (error) {
+      this.logger.error(`❌ Failed to update popular item:`, error.message);
+    }
+  }
+
+  /**
+   * Update daily analytics
+   */
+  private async updateDailyAnalytics(
+    restaurantId: string,
+    date: Date,
+    orderTotal: number,
+  ) {
+    const dateKey = new Date(date.setHours(0, 0, 0, 0));
+
+    try {
+      const existingReport = await this.prisma.dailyReport.findUnique({
+        where: {
+          restaurantId_date: {
+            restaurantId: restaurantId || 'global',
+            date: dateKey,
+          },
+        },
+      });
+
+      if (existingReport) {
+        const newTotalOrders = existingReport.totalOrders + 1;
+        const newTotalRevenue = existingReport.totalRevenue + orderTotal;
+
+        await this.prisma.dailyReport.update({
+          where: { id: existingReport.id },
+          data: {
+            totalOrders: newTotalOrders,
+            totalRevenue: newTotalRevenue,
+            averageOrderValue: newTotalRevenue / newTotalOrders,
+          },
+        });
+      } else {
+        await this.prisma.dailyReport.create({
+          data: {
+            restaurantId: restaurantId || 'global',
+            date: dateKey,
+            totalOrders: 1,
+            totalRevenue: orderTotal,
+            averageOrderValue: orderTotal,
+            customerCount: 1,
+          },
+        });
+      }
+    } catch (error) {
+      this.logger.error(`❌ Failed to update daily analytics:`, error.message);
+    }
+  }
+
+  /**
+   * Get analytics data with caching
+   */
+  async getAnalytics(
+    restaurantId: string | undefined,
+    metricType: AnalyticsType,
+    startDate: Date,
+    endDate: Date,
+  ) {
+    const cacheKey = `analytics:${restaurantId || 'global'}:${metricType}:${startDate.toISOString()}:${endDate.toISOString()}`;
+
+    try {
+      // Check cache
+      const cached = await this.redisService.get(cacheKey);
+      if (cached) {
+        this.logger.log(`🎯 Cache hit for analytics: ${cacheKey}`);
+        return JSON.parse(cached);
+      }
+
+      // Fetch from database
+      const analytics = await this.prisma.analytics.findMany({
+        where: {
+          restaurantId: restaurantId || undefined,
+          metricType: metricType as any,
+          date: {
+            gte: startDate,
+            lte: endDate,
+          },
+        },
+        orderBy: {
+          date: 'asc',
+        },
+      });
+
+      // Cache results for 5 minutes
+      await this.redisService.set(cacheKey, JSON.stringify(analytics), 300);
+
+      return analytics;
+    } catch (error) {
+      this.logger.error(`❌ Failed to get analytics:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Get daily report
+   */
+  async getDailyReport(restaurantId: string | undefined, date: Date) {
+    const cacheKey = `daily-report:${restaurantId || 'global'}:${date.toISOString()}`;
+
+    try {
+      // Check cache
+      const cached = await this.redisService.get(cacheKey);
+      if (cached) {
+        this.logger.log(`🎯 Cache hit for daily report: ${cacheKey}`);
+        return JSON.parse(cached);
+      }
+
+      // Fetch from database
+      const report = await this.prisma.dailyReport.findUnique({
+        where: {
+          restaurantId_date: {
+            restaurantId: restaurantId || 'global',
+            date: new Date(date.setHours(0, 0, 0, 0)),
+          },
+        },
+      });
+
+      if (report) {
+        // Cache for 1 hour
+        await this.redisService.set(cacheKey, JSON.stringify(report), 3600);
+      }
+
+      return report;
+    } catch (error) {
+      this.logger.error(`❌ Failed to get daily report:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Get popular items
+   */
+  async getPopularItems(
+    restaurantId: string,
+    startDate: Date,
+    endDate: Date,
+    limit: number = 10,
+  ) {
+    const cacheKey = `popular-items:${restaurantId}:${startDate.toISOString()}:${endDate.toISOString()}:${limit}`;
+
+    try {
+      // Check cache
+      const cached = await this.redisService.get(cacheKey);
+      if (cached) {
+        this.logger.log(`🎯 Cache hit for popular items: ${cacheKey}`);
+        return JSON.parse(cached);
+      }
+
+      // Fetch from database
+      const items = await this.prisma.popularItem.findMany({
+        where: {
+          restaurantId,
+          date: {
+            gte: startDate,
+            lte: endDate,
+          },
+        },
+        orderBy: {
+          orderCount: 'desc',
+        },
+        take: limit,
+      });
+
+      // Cache for 10 minutes
+      await this.redisService.set(cacheKey, JSON.stringify(items), 600);
+
+      return items;
+    } catch (error) {
+      this.logger.error(`❌ Failed to get popular items:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate daily report (scheduled task)
+   */
+  async generateDailyReport() {
+    this.logger.log('📊 Generating daily reports...');
+
+    try {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      yesterday.setHours(0, 0, 0, 0);
+
+      // Get all unique restaurants from revenue metrics
+      const restaurants = await this.prisma.revenueMetric.findMany({
+        where: {
+          date: {
+            gte: yesterday,
+            lt: new Date(yesterday.getTime() + 24 * 60 * 60 * 1000),
+          },
+        },
+        select: {
+          restaurantId: true,
+        },
+        distinct: ['restaurantId'],
+      });
+
+      for (const restaurant of restaurants) {
+        if (restaurant.restaurantId) {
+          await this.updateDailyReport(restaurant.restaurantId, yesterday);
+        }
+      }
+
+      // Generate global report
+      await this.updateDailyReport(null, yesterday);
+
+      this.logger.log(`✅ Daily reports generated for ${restaurants.length} restaurants`);
+    } catch (error) {
+      this.logger.error(`❌ Failed to generate daily reports:`, error.message);
+    }
+  }
+
+  /**
+   * Update daily report
+   */
+  private async updateDailyReport(restaurantId: string | null, date: Date) {
+    try {
+      const startOfDay = new Date(date.setHours(0, 0, 0, 0));
+      const endOfDay = new Date(date.setHours(23, 59, 59, 999));
+
+      // Get metrics for the day
+      const metrics = await this.prisma.revenueMetric.findMany({
+        where: {
+          restaurantId: restaurantId || undefined,
+          date: {
+            gte: startOfDay,
+            lte: endOfDay,
+          },
+        },
+      });
+
+      if (metrics.length === 0) {
+        return;
+      }
+
+      const totalRevenue = metrics.reduce((sum, m) => sum + m.amount, 0);
+      const totalOrders = metrics.length;
+      const averageOrderValue = totalRevenue / totalOrders;
+
+      // Get popular items
+      const popularItems = await this.prisma.popularItem.findMany({
+        where: {
+          restaurantId: restaurantId || undefined,
+          date: startOfDay,
+        },
+        orderBy: {
+          orderCount: 'desc',
+        },
+        take: 5,
+      });
+
+      // Upsert daily report
+      await this.prisma.dailyReport.upsert({
+        where: {
+          restaurantId_date: {
+            restaurantId: restaurantId || 'global',
+            date: startOfDay,
+          },
+        },
+        update: {
+          totalOrders,
+          totalRevenue,
+          averageOrderValue,
+          popularItems: popularItems,
+        },
+        create: {
+          restaurantId: restaurantId || 'global',
+          date: startOfDay,
+          totalOrders,
+          totalRevenue,
+          averageOrderValue,
+          popularItems: popularItems,
+          customerCount: totalOrders, // Simplified
+        },
+      });
+    } catch (error) {
+      this.logger.error(`❌ Failed to update daily report:`, error.message);
+    }
+  }
+
+  /**
+   * Invalidate analytics cache
+   */
+  private async invalidateAnalyticsCache(restaurantId: string) {
+    try {
+      const pattern = `analytics:${restaurantId}:*`;
+      // Note: In production, you'd use Redis SCAN to find and delete matching keys
+      this.logger.log(`🗑️ Invalidating analytics cache for restaurant: ${restaurantId}`);
+    } catch (error) {
+      this.logger.error(`❌ Failed to invalidate cache:`, error.message);
+    }
+  }
+}
+

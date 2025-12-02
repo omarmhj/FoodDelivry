@@ -1,0 +1,91 @@
+// Prisma Schema for Analytics Service
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../node_modules/.prisma/analytics-client"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model Analytics {
+  id           String        @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId String?       @db.ObjectId
+  metricType   AnalyticsType
+  value        Float
+  date         DateTime
+  metadata     Json?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([restaurantId])
+  @@index([metricType])
+  @@index([date])
+  @@map("Analytics")
+}
+
+model DailyReport {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId      String?  @db.ObjectId
+  date              DateTime
+  totalOrders       Int      @default(0)
+  totalRevenue      Float    @default(0)
+  averageOrderValue Float    @default(0)
+  popularItems      Json?
+  customerCount     Int      @default(0)
+  metadata          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([restaurantId, date])
+  @@index([date])
+  @@map("DailyReport")
+}
+
+model RevenueMetric {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId String?  @db.ObjectId
+  orderId      String   @db.ObjectId
+  orderNumber  String
+  amount       Float
+  date         DateTime
+  hour         Int
+  dayOfWeek    Int
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  @@index([restaurantId])
+  @@index([date])
+  @@index([orderId])
+  @@map("RevenueMetric")
+}
+
+model PopularItem {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId String   @db.ObjectId
+  menuItemId   String   @db.ObjectId
+  menuItemName String
+  orderCount   Int      @default(0)
+  totalRevenue Float    @default(0)
+  date         DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([restaurantId, menuItemId, date])
+  @@index([restaurantId])
+  @@index([date])
+  @@map("PopularItem")
+}
+
+enum AnalyticsType {
+  DAILY_SALES
+  POPULAR_ITEMS
+  CUSTOMER_TRAFFIC
+  ORDER_VOLUME
+  REVENUE
+  AVERAGE_ORDER_VALUE
+  PEAK_HOURS
+  CUSTOMER_RETENTION
+}
+

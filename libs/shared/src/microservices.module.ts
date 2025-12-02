@@ -10,10 +10,10 @@ import { RedisModule } from './redis.module';
       {
         name: 'RABBITMQ_SERVICE',
         imports: [ConfigModule],
-        useFactory: async (configService: ConfigService) => ({
+        useFactory: (configService: ConfigService) => ({
           transport: Transport.RMQ,
           options: {
-            urls: [configService.get<string>('RABBITMQ_URL')],
+            urls: [configService.get<string>('RABBITMQ_URL') || 'amqp://admin:rabbit123@localhost:5672'],
             queue: 'snackrapido_queue',
             queueOptions: {
               durable: true,
@@ -21,6 +21,21 @@ import { RedisModule } from './redis.module';
             socketOptions: {
               heartbeatIntervalInSeconds: 60,
               reconnectTimeInSeconds: 5,
+            },
+          },
+        }),
+        inject: [ConfigService],
+      },
+      {
+        name: 'NOTIFICATIONS_SERVICE',
+        imports: [ConfigModule],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [configService.get<string>('RABBITMQ_URL') || 'amqp://admin:rabbit123@localhost:5672'],
+            queue: 'notifications_queue',
+            queueOptions: {
+              durable: true,
             },
           },
         }),

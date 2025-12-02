@@ -241,7 +241,7 @@ export class OrdersService {
       await this.cacheOrder(orderWithHistory);
 
       // Publish status update event
-      await this.publishOrderEvent('order.status_updated', updatedOrder, previousStatus);
+      await this.publishOrderEvent('order.status.updated', updatedOrder, previousStatus);
 
       this.logger.log(`✅ Order status updated successfully: ${updatedOrder.orderNumber}`);
 
@@ -644,32 +644,41 @@ export class OrdersService {
   }
 
   private async publishOrderEvent(eventType: string, order: any, previousStatus?: OrderStatus): Promise<void> {
-    const eventData: OrderEventData = {
-      orderId: order.id,
-      orderNumber: order.orderNumber,
-      customerId: order.customerId,
-      restaurantId: order.restaurantId,
-      status: order.status,
-      previousStatus,
-      total: order.total,
-      items: order.items.map((item: any) => ({
-        menuItemId: item.menuItemId,
-        menuItemName: item.menuItemName,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-      })),
-      deliveryType: order.deliveryType,
-      deliveryAddress: order.deliveryAddress,
-      timestamp: new Date(),
-      metadata: {
-        customerName: order.customerName,
-        customerEmail: order.customerEmail,
-        restaurantName: order.restaurantName,
-        estimatedDeliveryTime: order.estimatedDeliveryTime,
-      },
-    };
+    try {
+      this.logger.log(`📤 Publishing event: ${eventType} for order: ${order.orderNumber || order.id}`);
+      
+      const eventData: OrderEventData = {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        customerId: order.customerId,
+        restaurantId: order.restaurantId,
+        status: order.status,
+        previousStatus,
+        total: order.total,
+        items: order.items.map((item: any) => ({
+          menuItemId: item.menuItemId,
+          menuItemName: item.menuItemName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        })),
+        deliveryType: order.deliveryType,
+        deliveryAddress: order.deliveryAddress,
+        timestamp: new Date(),
+        metadata: {
+          customerName: order.customerName,
+          customerEmail: order.customerEmail,
+          restaurantName: order.restaurantName,
+          estimatedDeliveryTime: order.estimatedDeliveryTime,
+        },
+      };
 
-    await this.rabbitMQService.emitEvent(eventType, eventData);
+      this.logger.log(`📤 Event data prepared for ${eventType}:`, JSON.stringify(eventData, null, 2));
+      await this.rabbitMQService.emitEvent(eventType, eventData);
+      this.logger.log(`✅ Event ${eventType} published successfully`);
+    } catch (error) {
+      this.logger.error(`❌ Failed to publish event ${eventType}:`, error.message);
+      this.logger.error(`❌ Error stack:`, error.stack);
+    }
   }
 
   /**
