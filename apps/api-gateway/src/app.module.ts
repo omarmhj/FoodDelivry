@@ -13,7 +13,23 @@ import { IntrospectAndCompose } from '@apollo/gateway';
           subgraphs: [
             {
               name: 'users',
+              url: 'http://localhost:3000/graphql',
+            },
+            {
+              name: 'restaurants',
               url: 'http://localhost:4001/graphql',
+            },
+            {
+              name: 'orders',
+              url: 'http://localhost:4002/graphql',
+            },
+            {
+              name: 'analytics',
+              url: 'http://localhost:4003/graphql',
+            },
+            {
+              name: 'reservations',
+              url: 'http://localhost:4004/graphql',
             },
           ],
         }),

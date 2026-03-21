@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
+import { ValidationPipe } from '@nestjs/common';
 import { join } from 'path';
 import { UsersModule } from './user.module';
 
@@ -13,11 +14,20 @@ async function bootstrap() {
 
   const app = await NestFactory.create<NestExpressApplication>(UsersModule);
 
+  // Global validation pipe — enforces class-validator decorators on all DTOs
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,       // Strip properties not in DTO
+      forbidNonWhitelisted: true, // Throw if unknown properties sent
+      transform: true,       // Auto-transform payloads to DTO instances
+    }),
+  );
+
   // Connect to RabbitMQ as a microservice consumer
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
     options: {
-      urls: [process.env.RABBITMQ_URL || 'amqp://admin:rabbit123@localhost:5672'],
+      urls: [process.env.RABBITMQ_URL || 'amqp://admin:rabbit123@localhost:5673'],
       queue: 'snackrapido_queue',
       queueOptions: {
         durable: true,
@@ -30,7 +40,13 @@ async function bootstrap() {
   app.setViewEngine('ejs');
 
   app.enableCors({
-    origin: '*',
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:4000',
+      'https://studio.apollographql.com',
+    ],
+    credentials: true,
   });
 
   // Start all microservices and wait for connection

@@ -13,7 +13,9 @@ import * as bcrypt from 'bcrypt';
 import { EmailService } from './email/email.service';
 import { TokenSender } from './utils/sendToken';
 import { User } from '@prisma/client';
-import {PrismaService} from "../prisma/prisma.service";
+import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../../../libs/shared/src/redis.service';
+
 interface UserData {
   name: string;
   email: string;
@@ -30,6 +32,7 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly emailService: EmailService,
+    private readonly redisService: RedisService,
   ) {}
 
   // register user service
@@ -42,7 +45,7 @@ export class UsersService {
       },
     });
     if (isEmailExist) {
-      throw new BadRequestException('User already exist with this email!');
+      throw new BadRequestException('Unable to process registration. Please try with different credentials.');
     }
 
     const phoneNumbersToCheck = [phone_number];
@@ -58,7 +61,7 @@ export class UsersService {
 
     if (usersWithPhoneNumber.length > 0) {
       throw new BadRequestException(
-        'User already exist with this phone number!',
+        'Unable to process registration. Please try with different credentials.',
       );
     }
 
@@ -97,14 +100,23 @@ export class UsersService {
   async createActivationToken(user: UserData) {
     const activationCode = Math.floor(1000 + Math.random() * 9000).toString();
 
+    // Store user data (including password) in Redis, NOT in the JWT
+    const registrationId = `reg:${user.email}:${Date.now()}`;
+    await this.redisService.set(
+      registrationId,
+      JSON.stringify(user),
+      600, // 10 minutes TTL
+    );
+
     const token = this.jwtService.sign(
       {
-        user,
+        registrationId,
+        email: user.email,
         activationCode,
       },
       {
         secret: this.configService.get<string>('ACTIVATION_SECRET'),
-        expiresIn: '5m',
+        expiresIn: '10m',
       },
     );
     return { token, activationCode };
@@ -114,16 +126,22 @@ export class UsersService {
   async activateUser(activationDto: ActivationDto, response: Response) {
     const { activationToken, activationCode } = activationDto;
 
-    const newUser: { user: UserData; activationCode: string } =
+    const decoded: { registrationId: string; email: string; activationCode: string } =
       this.jwtService.verify(activationToken, {
         secret: this.configService.get<string>('ACTIVATION_SECRET'),
-      } as JwtVerifyOptions) as { user: UserData; activationCode: string };
+      } as JwtVerifyOptions) as { registrationId: string; email: string; activationCode: string };
 
-    if (newUser.activationCode !== activationCode) {
+    if (decoded.activationCode !== activationCode) {
       throw new BadRequestException('Invalid activation code');
     }
 
-    const { name, email, password, phone_number } = newUser.user;
+    // Retrieve user data from Redis
+    const userData = await this.redisService.get(decoded.registrationId);
+    if (!userData) {
+      throw new BadRequestException('Activation token expired. Please register again.');
+    }
+
+    const { name, email, password, phone_number }: UserData = JSON.parse(userData);
 
     const existUser = await this.prisma.user.findUnique({
       where: {
@@ -132,7 +150,7 @@ export class UsersService {
     });
 
     if (existUser) {
-      throw new BadRequestException('User already exist with this email!');
+      throw new BadRequestException('User already activated.');
     }
 
     const user = await this.prisma.user.create({
@@ -143,6 +161,9 @@ export class UsersService {
         phone_number,
       },
     });
+
+    // Clean up Redis after successful activation
+    await this.redisService.del(decoded.registrationId);
 
     return { user, response };
   }
@@ -161,9 +182,9 @@ export class UsersService {
       return tokenSender.sendToken(user);
     } else {
       return {
-        user: null,
-        accessToken: null,
-        refreshToken: null,
+        user: undefined,
+        accessToken: undefined,
+        refreshToken: undefined,
         error: {
           message: 'Invalid email or password',
         },
@@ -202,8 +223,9 @@ export class UsersService {
       },
     });
 
+    // Always return success to prevent account enumeration
     if (!user) {
-      throw new BadRequestException('User not found with this email!');
+      return { message: 'If an account with that email exists, a reset link has been sent.' };
     }
     const forgotPasswordToken = await this.generateForgotPasswordLink(user);
 
@@ -219,16 +241,23 @@ export class UsersService {
       activationCode: resetPasswordUrl,
     });
 
-    return { message: `Your forgot password request succesful!` };
+    return { message: 'If an account with that email exists, a reset link has been sent.' };
   }
 
   // reset password
   async resetPassword(resetPasswordDto: ResetPasswordDto) {
     const { password, activationToken } = resetPasswordDto;
 
-    const decoded = await this.jwtService.decode(activationToken);
+    let decoded: any;
+    try {
+      decoded = this.jwtService.verify(activationToken, {
+        secret: this.configService.get<string>('FORGOT_PASSWORD_SECRET'),
+      });
+    } catch (error) {
+      throw new BadRequestException('Invalid or expired reset token!');
+    }
 
-    if (!decoded || decoded?.exp * 1000 < Date.now()) {
+    if (!decoded) {
       throw new BadRequestException('Invalid token!');
     }
 
@@ -258,6 +287,33 @@ export class UsersService {
   // log out user
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async Logout(req: any) {
+    const accessToken = req.accesstoken;
+    const refreshToken = req.refreshtoken;
+
+    // Blacklist both tokens in Redis until they expire
+    if (accessToken) {
+      try {
+        const decoded = this.jwtService.decode(accessToken) as any;
+        if (decoded?.exp) {
+          const ttl = decoded.exp - Math.floor(Date.now() / 1000);
+          if (ttl > 0) {
+            await this.redisService.set(`bl:${accessToken}`, '1', ttl);
+          }
+        }
+      } catch (e) { /* token already invalid, nothing to blacklist */ }
+    }
+    if (refreshToken) {
+      try {
+        const decoded = this.jwtService.decode(refreshToken) as any;
+        if (decoded?.exp) {
+          const ttl = decoded.exp - Math.floor(Date.now() / 1000);
+          if (ttl > 0) {
+            await this.redisService.set(`bl:${refreshToken}`, '1', ttl);
+          }
+        }
+      } catch (e) { /* token already invalid */ }
+    }
+
     req.user = null;
     req.refreshtoken = null;
     req.accesstoken = null;
@@ -304,28 +360,21 @@ export class UsersService {
     }
   }
 
-  // Get user by ID (RabbitMQ handler)
+  // Get user by ID (used by both GraphQL resolver and RabbitMQ handler)
   async getUserById(data: { userId: string }) {
     this.logger.log(`📋 Getting user by ID: ${data.userId}`);
     
     try {
       const user = await this.prisma.user.findUnique({
         where: { id: data.userId },
+        include: { avatar: true },
       });
 
       if (!user) {
         return { user: null, error: 'User not found' };
       }
 
-      return {
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          phone_number: user.phone_number,
-          role: user.role,
-        },
-      };
+      return { user };
     } catch (error) {
       this.logger.error(`❌ Get user failed: ${error.message}`);
       return { user: null, error: 'Failed to get user' };

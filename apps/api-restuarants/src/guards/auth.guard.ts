@@ -27,21 +27,25 @@ export class AuthGuard implements CanActivate {
     if (!accessToken || !refreshToken) {
       throw new UnauthorizedException('Please login to access this resource!');
     }
-    if (accessToken) {
+
+    try {
+      // Verify signature AND expiration properly
       const decoded = this.jwtService.verify(accessToken, {
-        ignoreExpiration: true,
         secret: this.config.get<string>('ACCESS_TOKEN_SECRET'),
       });
 
-      if (decoded?.exp * 1000 < Date.now()) {
-        await this.updateAccessToken(req);
-      }
-      
-      // Set restaurant info in request
       req.restaurant = { id: decoded.id, email: decoded.email };
+      req.accesstoken = accessToken;
+      req.refreshtoken = refreshToken;
+      return true;
+    } catch (error) {
+      // If access token expired, try refreshing
+      if (error?.name === 'TokenExpiredError') {
+        await this.updateAccessToken(req);
+        return true;
+      }
+      throw new UnauthorizedException('Invalid or expired token!');
     }
-
-    return true;
   }
 
   private async updateAccessToken(req: any): Promise<void> {

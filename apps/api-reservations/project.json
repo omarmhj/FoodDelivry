@@ -1,0 +1,53 @@
+{
+  "name": "api-reservations",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/api-reservations/src",
+  "projectType": "application",
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/api-reservations",
+        "main": "apps/api-reservations/src/main.ts",
+        "tsConfig": "apps/api-reservations/tsconfig.app.json",
+        "assets": [],
+        "webpackConfig": "apps/api-reservations/webpack.config.js"
+      },
+      "configurations": {
+        "development": {},
+        "production": {}
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "options": {
+        "buildTarget": "api-reservations:build"
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "api-reservations:build:development"
+        },
+        "production": {
+          "buildTarget": "api-reservations:build:production"
+        }
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "apps/api-reservations/jest.config.ts"
+      }
+    }
+  },
+  "tags": []
+}

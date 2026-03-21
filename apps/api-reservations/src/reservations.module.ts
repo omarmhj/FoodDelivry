@@ -1,41 +1,40 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { GraphQLModule } from '@nestjs/graphql';
+import { JwtService } from '@nestjs/jwt';
 import {
   ApolloFederationDriver,
   ApolloFederationDriverConfig,
 } from '@nestjs/apollo';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
-import { UsersResolver } from './user.resolver';
-import { EmailModule } from './email/email.module';
-import { UsersService } from './user.service';
-import { UsersController } from './user.controller';
 import { PrismaService } from '../prisma/prisma.service';
+import { ReservationsService } from './reservations.service';
+import { ReservationsResolver } from './reservations.resolver';
+import { AuthGuard } from './guards/auth.guard';
 import { SharedModule } from '../../../libs/shared/src/shared.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env.local', '.env'],
+      envFilePath: ['apps/api-reservations/.env.local', 'apps/api-reservations/.env'],
     }),
     GraphQLModule.forRoot<ApolloFederationDriverConfig>({
       driver: ApolloFederationDriver,
       autoSchemaFile: {
         federation: 2,
       },
-      includeStacktraceInErrorResponses: false,
+      context: ({ req, res }) => ({ req, res }),
     }),
-    EmailModule,
     SharedModule,
   ],
-  controllers: [UsersController],
   providers: [
-    UsersService,
+    ReservationsService,
+    ReservationsResolver,
+    PrismaService,
+    AuthGuard,
     ConfigService,
     JwtService,
-    PrismaService,
-    UsersResolver,
   ],
+  exports: [ReservationsService, PrismaService],
 })
-export class UsersModule {}
+export class ReservationsModule {}

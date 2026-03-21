@@ -481,6 +481,152 @@ export class NotificationsService {
     }
   }
 
+  // ==================== RESERVATION EVENT HANDLERS ====================
+
+  /**
+   * Handle reservation.created event
+   */
+  async handleReservationCreated(data: any) {
+    this.logger.log(`📅 Reservation created event: ${data.reservationNumber}`);
+
+    try {
+      await this.createNotification({
+        userId: data.customerId,
+        type: NotificationType.RESERVATION_CONFIRMATION,
+        title: 'Reservation Request Received',
+        message: `Your reservation #${data.reservationNumber} at ${data.restaurantName} for ${data.partySize} on ${new Date(data.date).toLocaleDateString()} at ${data.startTime} has been received.`,
+        metadata: {
+          reservationId: data.reservationId,
+          reservationNumber: data.reservationNumber,
+          restaurantName: data.restaurantName,
+          date: data.date,
+          startTime: data.startTime,
+          partySize: data.partySize,
+          tableNumber: data.tableNumber,
+        },
+      });
+
+      if (data.customerEmail) {
+        try {
+          await this.sendEmailNotification({
+            to: data.customerEmail,
+            subject: `Reservation Received - ${data.reservationNumber}`,
+            content: `
+              <h2>Reservation Request Received</h2>
+              <p>Dear ${data.customerName || 'Customer'},</p>
+              <p>Your reservation has been received and is pending confirmation.</p>
+              <ul>
+                <li><strong>Reservation:</strong> ${data.reservationNumber}</li>
+                <li><strong>Restaurant:</strong> ${data.restaurantName}</li>
+                <li><strong>Date:</strong> ${new Date(data.date).toLocaleDateString()}</li>
+                <li><strong>Time:</strong> ${data.startTime} - ${data.endTime}</li>
+                <li><strong>Party Size:</strong> ${data.partySize}</li>
+                ${data.tableNumber ? `<li><strong>Table:</strong> ${data.tableNumber}</li>` : ''}
+              </ul>
+              <p>We'll notify you once your reservation is confirmed.</p>
+              <p>Best regards,<br/>SnackRapido Team</p>
+            `,
+            userId: data.customerId,
+            type: NotificationType.RESERVATION_CONFIRMATION,
+          });
+        } catch (emailError) {
+          this.logger.warn(`⚠️ Reservation email failed: ${emailError.message}`);
+        }
+      }
+    } catch (error) {
+      this.logger.error(`❌ Failed to handle reservation.created:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle reservation.confirmed event
+   */
+  async handleReservationConfirmed(data: any) {
+    this.logger.log(`✅ Reservation confirmed: ${data.reservationNumber}`);
+
+    try {
+      await this.createNotification({
+        userId: data.customerId,
+        type: NotificationType.RESERVATION_CONFIRMATION,
+        title: 'Reservation Confirmed',
+        message: `Your reservation #${data.reservationNumber} at ${data.restaurantName} has been confirmed!`,
+        metadata: {
+          reservationId: data.reservationId,
+          reservationNumber: data.reservationNumber,
+          status: 'CONFIRMED',
+        },
+      });
+
+      if (data.customerEmail) {
+        try {
+          await this.sendEmailNotification({
+            to: data.customerEmail,
+            subject: `Reservation Confirmed - ${data.reservationNumber}`,
+            content: `
+              <h2>Reservation Confirmed ✅</h2>
+              <p>Great news! Your reservation <strong>#${data.reservationNumber}</strong> at <strong>${data.restaurantName}</strong> has been confirmed.</p>
+              <p>We look forward to seeing you!</p>
+              <p>Best regards,<br/>SnackRapido Team</p>
+            `,
+            userId: data.customerId,
+            type: NotificationType.RESERVATION_CONFIRMATION,
+          });
+        } catch (emailError) {
+          this.logger.warn(`⚠️ Confirmation email failed: ${emailError.message}`);
+        }
+      }
+    } catch (error) {
+      this.logger.error(`❌ Failed to handle reservation.confirmed:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle reservation.cancelled event
+   */
+  async handleReservationCancelled(data: any) {
+    this.logger.log(`❌ Reservation cancelled: ${data.reservationNumber}`);
+
+    try {
+      await this.createNotification({
+        userId: data.customerId,
+        type: NotificationType.RESERVATION_CONFIRMATION,
+        title: 'Reservation Cancelled',
+        message: `Your reservation #${data.reservationNumber} at ${data.restaurantName} has been cancelled.${data.reason ? ` Reason: ${data.reason}` : ''}`,
+        metadata: {
+          reservationId: data.reservationId,
+          reservationNumber: data.reservationNumber,
+          status: 'CANCELLED',
+          reason: data.reason,
+        },
+      });
+
+      if (data.customerEmail) {
+        try {
+          await this.sendEmailNotification({
+            to: data.customerEmail,
+            subject: `Reservation Cancelled - ${data.reservationNumber}`,
+            content: `
+              <h2>Reservation Cancelled</h2>
+              <p>Your reservation <strong>#${data.reservationNumber}</strong> at <strong>${data.restaurantName}</strong> has been cancelled.</p>
+              ${data.reason ? `<p><strong>Reason:</strong> ${data.reason}</p>` : ''}
+              <p>You can make a new reservation anytime.</p>
+              <p>Best regards,<br/>SnackRapido Team</p>
+            `,
+            userId: data.customerId,
+            type: NotificationType.RESERVATION_CONFIRMATION,
+          });
+        } catch (emailError) {
+          this.logger.warn(`⚠️ Cancellation email failed: ${emailError.message}`);
+        }
+      }
+    } catch (error) {
+      this.logger.error(`❌ Failed to handle reservation.cancelled:`, error.message);
+      throw error;
+    }
+  }
+
   /**
    * Mark notification as read
    */

@@ -13,6 +13,9 @@ constructor(private readonly notificationsService: NotificationsService) {
     this.logger.log('   - order.status.updated');
     this.logger.log('   - order.reviewed');
     this.logger.log('   - order.cancelled');
+    this.logger.log('   - reservation.created');
+    this.logger.log('   - reservation.confirmed');
+    this.logger.log('   - reservation.cancelled');
   }
 
   /**
@@ -73,6 +76,32 @@ constructor(private readonly notificationsService: NotificationsService) {
     }).catch(error => this.logger.error(`❌ Error handling order.cancelled:`, error.message));
     
     this.logger.log(`✅ Accepted order.cancelled event for order: ${data.orderNumber}`);
+  }
+
+  // ==================== RESERVATION EVENTS ====================
+
+  @EventPattern('reservation.created')
+  async handleReservationCreated(@Payload() data: any) {
+    this.logger.log(`📅 Received reservation.created event: ${data.reservationNumber}`);
+
+    await this.notificationsService.handleReservationCreated(data)
+      .catch(error => this.logger.error(`❌ Error handling reservation.created:`, error.message));
+  }
+
+  @EventPattern('reservation.confirmed')
+  async handleReservationConfirmed(@Payload() data: any) {
+    this.logger.log(`✅ Received reservation.confirmed event: ${data.reservationNumber}`);
+
+    await this.notificationsService.handleReservationConfirmed(data)
+      .catch(error => this.logger.error(`❌ Error handling reservation.confirmed:`, error.message));
+  }
+
+  @EventPattern('reservation.cancelled')
+  async handleReservationCancelled(@Payload() data: any) {
+    this.logger.log(`❌ Received reservation.cancelled event: ${data.reservationNumber}`);
+
+    await this.notificationsService.handleReservationCancelled(data)
+      .catch(error => this.logger.error(`❌ Error handling reservation.cancelled:`, error.message));
   }
 }
 

@@ -27,8 +27,7 @@ export class User {
   @Field()
   email: string;
 
-  @Field()
-  password: string;
+  // Password intentionally excluded from GraphQL schema
 
   @Field(() => Avatars, { nullable: true })
   avatar?: Avatars | null;

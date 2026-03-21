@@ -47,6 +47,13 @@ export const MESSAGE_PATTERNS = {
   SEND_SMS: 'notification.send_sms',
   SEND_PUSH: 'notification.send_push',
   
+  // Reservation Patterns
+  RESERVATION_CREATED: 'reservation.created',
+  RESERVATION_CONFIRMED: 'reservation.confirmed',
+  RESERVATION_CANCELLED: 'reservation.cancelled',
+  RESERVATION_COMPLETED: 'reservation.completed',
+  RESERVATION_NO_SHOW: 'reservation.no_show',
+  
   // Cache Patterns
   CACHE_INVALIDATE: 'cache.invalidate',
   CACHE_CLEAR: 'cache.clear',
@@ -113,6 +120,9 @@ export const CACHE_KEYS = {
   ORDER_STATUS: (id: string) => `order_status:${id}`,
   CUSTOMER_ORDERS: (customerId: string) => `customer_orders:${customerId}`,
   RESTAURANT_ORDERS: (restaurantId: string) => `restaurant_orders:${restaurantId}`,
+  RESERVATION: (id: string) => `reservation:${id}`,
+  RESTAURANT_RESERVATIONS: (restaurantId: string, date: string) => `restaurant_reservations:${restaurantId}:${date}`,
+  TABLE_AVAILABILITY: (restaurantId: string, date: string) => `table_availability:${restaurantId}:${date}`,
   RESTAURANTS_NEARBY: (lat: number, lng: number, radius: number) => 
     `restaurants:nearby:${lat}:${lng}:${radius}`,
   USER_SESSION: (userId: string) => `session:user:${userId}`,

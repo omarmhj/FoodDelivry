@@ -78,7 +78,8 @@ export class AnalyticsService {
     revenue: number,
     date: Date,
   ) {
-    const dateKey = new Date(date.setHours(0, 0, 0, 0));
+    const dateKey = new Date(date);
+    dateKey.setHours(0, 0, 0, 0);
 
     try {
       const existingItem = await this.prisma.popularItem.findUnique({
@@ -124,7 +125,8 @@ export class AnalyticsService {
     date: Date,
     orderTotal: number,
   ) {
-    const dateKey = new Date(date.setHours(0, 0, 0, 0));
+    const dateKey = new Date(date);
+    dateKey.setHours(0, 0, 0, 0);
 
     try {
       const existingReport = await this.prisma.dailyReport.findUnique({
@@ -402,9 +404,22 @@ export class AnalyticsService {
    */
   private async invalidateAnalyticsCache(restaurantId: string) {
     try {
-      const pattern = `analytics:${restaurantId}:*`;
-      // Note: In production, you'd use Redis SCAN to find and delete matching keys
-      this.logger.log(`🗑️ Invalidating analytics cache for restaurant: ${restaurantId}`);
+      const patterns = [
+        `analytics:${restaurantId}:*`,
+        `daily-report:${restaurantId}:*`,
+        `popular-items:${restaurantId}:*`,
+        `analytics:global:*`,
+        `daily-report:global:*`,
+      ];
+
+      for (const pattern of patterns) {
+        const keys = await this.redisService.keys(pattern);
+        for (const key of keys) {
+          await this.redisService.del(key);
+        }
+      }
+
+      this.logger.log(`🗑️ Invalidated analytics cache for restaurant: ${restaurantId}`);
     } catch (error) {
       this.logger.error(`❌ Failed to invalidate cache:`, error.message);
     }

@@ -1,0 +1,300 @@
+{
+  "info": {
+    "name": "SnackRapido - Users Service",
+    "description": "GraphQL API for the SnackRapido Users microservice (port 3000).\n\nAuth flow:\n1. Register → get activation_token\n2. Activate → get user\n3. Login → get accessToken + refreshToken\n4. Use tokens in headers for protected routes\n\nProtected routes require:\n- accesstoken header\n- refreshtoken header",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/graphql"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "refreshToken",
+      "value": ""
+    },
+    {
+      "key": "activationToken",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "description": "Registration, activation, login, logout, password reset",
+      "item": [
+        {
+          "name": "1. Register User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.register && res.data.register.activation_token) {",
+                  "    pm.collectionVariables.set('activationToken', res.data.register.activation_token);",
+                  "    pm.test('Registration successful - activation_token saved', () => {",
+                  "        pm.expect(res.data.register.activation_token).to.be.a('string');",
+                  "    });",
+                  "} else {",
+                  "    pm.test('Registration failed', () => {",
+                  "        pm.expect.fail(JSON.stringify(res.errors || res));",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Register($registerDto: RegisterDto!) {\n  register(registerDto: $registerDto) {\n    activation_token\n    error {\n      message\n    }\n  }\n}",
+                "variables": "{\n  \"registerDto\": {\n    \"name\": \"Test User\",\n    \"email\": \"testuser@example.com\",\n    \"password\": \"Password123!\",\n    \"phone_number\": 1234567890\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}",
+              "host": ["{{baseUrl}}"]
+            },
+            "description": "Register a new user. Returns an activation_token (JWT containing the activation code). Check your email/console for the 4-digit activation code."
+          }
+        },
+        {
+          "name": "2. Activate User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.activateUser && res.data.activateUser.user) {",
+                  "    pm.test('Activation successful', () => {",
+                  "        pm.expect(res.data.activateUser.user.id).to.be.a('string');",
+                  "    });",
+                  "} else {",
+                  "    pm.test('Activation failed', () => {",
+                  "        pm.expect.fail(JSON.stringify(res.errors || res));",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation ActivateUser($activationDto: ActivationDto!) {\n  activateUser(activationDto: $activationDto) {\n    user {\n      id\n      name\n      email\n      role\n      createdAt\n    }\n    error {\n      message\n    }\n  }\n}",
+                "variables": "{\n  \"activationDto\": {\n    \"activationToken\": \"{{activationToken}}\",\n    \"activationCode\": \"PASTE_4_DIGIT_CODE_HERE\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}",
+              "host": ["{{baseUrl}}"]
+            },
+            "description": "Activate a registered user with the activation token (auto-saved from Register) and the 4-digit code from the email/console logs."
+          }
+        },
+        {
+          "name": "3. Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.Login && res.data.Login.accessToken) {",
+                  "    pm.collectionVariables.set('accessToken', res.data.Login.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', res.data.Login.refreshToken);",
+                  "    pm.test('Login successful - tokens saved', () => {",
+                  "        pm.expect(res.data.Login.accessToken).to.be.a('string');",
+                  "        pm.expect(res.data.Login.refreshToken).to.be.a('string');",
+                  "    });",
+                  "} else {",
+                  "    pm.test('Login failed', () => {",
+                  "        pm.expect.fail(JSON.stringify(res.errors || res.data));",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Login($email: String!, $password: String!) {\n  Login(email: $email, password: $password) {\n    user {\n      id\n      name\n      email\n      role\n      phone_number\n      address\n      createdAt\n    }\n    accessToken\n    refreshToken\n    error {\n      message\n    }\n  }\n}",
+                "variables": "{\n  \"email\": \"testuser@example.com\",\n  \"password\": \"Password123!\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}",
+              "host": ["{{baseUrl}}"]
+            },
+            "description": "Login with email/password. Returns user + accessToken + refreshToken. Tokens are auto-saved to collection variables."
+          }
+        },
+        {
+          "name": "4. Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation ForgotPassword($forgotPasswordDto: ForgotPasswordDto!) {\n  forgotPassword(forgotPasswordDto: $forgotPasswordDto) {\n    message\n    error {\n      message\n    }\n  }\n}",
+                "variables": "{\n  \"forgotPasswordDto\": {\n    \"email\": \"testuser@example.com\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}",
+              "host": ["{{baseUrl}}"]
+            },
+            "description": "Send a forgot password email with a reset link. The reset token is embedded in the URL sent to the user's email."
+          }
+        },
+        {
+          "name": "5. Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation ResetPassword($resetPasswordDto: ResetPasswordDto!) {\n  resetPassword(resetPasswordDto: $resetPasswordDto) {\n    user {\n      id\n      name\n      email\n    }\n    error {\n      message\n    }\n  }\n}",
+                "variables": "{\n  \"resetPasswordDto\": {\n    \"password\": \"NewPassword123!\",\n    \"activationToken\": \"PASTE_RESET_TOKEN_FROM_EMAIL_LINK\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}",
+              "host": ["{{baseUrl}}"]
+            },
+            "description": "Reset password using the token from the forgot-password email link (?verify=TOKEN). Provide the new password and the token."
+          }
+        },
+        {
+          "name": "6. Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query LogOut {\n  logOutUser {\n    message\n  }\n}",
+                "variables": "{}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}",
+              "host": ["{{baseUrl}}"]
+            },
+            "description": "Logout the current user. Requires accesstoken and refreshtoken headers."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "description": "User queries (most require authentication)",
+      "item": [
+        {
+          "name": "Get Logged In User (Protected)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetLoggedInUser {\n  getLoggedInUser {\n    user {\n      id\n      name\n      email\n      role\n      phone_number\n      address\n      avatar {\n        id\n        url\n        public_id\n      }\n      createdAt\n      updatedAt\n    }\n    accessToken\n    refreshToken\n  }\n}",
+                "variables": "{}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}",
+              "host": ["{{baseUrl}}"]
+            },
+            "description": "Get the currently authenticated user's profile. Returns fresh tokens if the access token was refreshed."
+          }
+        },
+        {
+          "name": "Get All Users (Protected)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetUsers {\n  getUsers {\n    id\n    name\n    email\n    role\n    phone_number\n    address\n    avatar {\n      id\n      url\n      public_id\n    }\n    createdAt\n    updatedAt\n  }\n}",
+                "variables": "{}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}",
+              "host": ["{{baseUrl}}"]
+            },
+            "description": "Get all users. Requires authentication."
+          }
+        },
+        {
+          "name": "Get User By ID (Protected)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetUserById($userId: String!) {\n  getUserById(userId: $userId) {\n    id\n    name\n    email\n    role\n    phone_number\n    address\n    avatar {\n      id\n      url\n      public_id\n    }\n    createdAt\n    updatedAt\n  }\n}",
+                "variables": "{\n  \"userId\": \"PASTE_USER_ID_HERE\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}",
+              "host": ["{{baseUrl}}"]
+            },
+            "description": "Get a specific user by their MongoDB ObjectId. Requires authentication."
+          }
+        }
+      ]
+    }
+  ]
+}

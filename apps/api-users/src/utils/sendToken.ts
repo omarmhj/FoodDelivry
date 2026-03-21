@@ -24,7 +24,6 @@ export class TokenSender {
     const refreshToken = this.jwt.sign(
       {
         id: user.id,
-        email: user.email,
       },
       {
         secret: this.config.get<string>('REFRESH_TOKEN_SECRET'),

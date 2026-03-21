@@ -13,7 +13,7 @@ import { RedisModule } from './redis.module';
         useFactory: (configService: ConfigService) => ({
           transport: Transport.RMQ,
           options: {
-            urls: [configService.get<string>('RABBITMQ_URL') || 'amqp://admin:rabbit123@localhost:5672'],
+            urls: [configService.get<string>('RABBITMQ_URL') || 'amqp://admin:rabbit123@localhost:5673'],
             queue: 'snackrapido_queue',
             queueOptions: {
               durable: true,
@@ -32,8 +32,23 @@ import { RedisModule } from './redis.module';
         useFactory: (configService: ConfigService) => ({
           transport: Transport.RMQ,
           options: {
-            urls: [configService.get<string>('RABBITMQ_URL') || 'amqp://admin:rabbit123@localhost:5672'],
+            urls: [configService.get<string>('RABBITMQ_URL') || 'amqp://admin:rabbit123@localhost:5673'],
             queue: 'notifications_queue',
+            queueOptions: {
+              durable: true,
+            },
+          },
+        }),
+        inject: [ConfigService],
+      },
+      {
+        name: 'ANALYTICS_SERVICE',
+        imports: [ConfigModule],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [configService.get<string>('RABBITMQ_URL') || 'amqp://admin:rabbit123@localhost:5673'],
+            queue: 'analytics_queue',
             queueOptions: {
               durable: true,
             },

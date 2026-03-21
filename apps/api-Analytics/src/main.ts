@@ -60,12 +60,12 @@ async function bootstrap() {
       ],
     });
 
-    // Connect RabbitMQ microservice
+    // Connect RabbitMQ microservice — use dedicated analytics queue
     app.connectMicroservice<MicroserviceOptions>({
       transport: Transport.RMQ,
       options: {
         urls: [process.env.RABBITMQ_URL || 'amqp://admin:rabbit123@localhost:5672'],
-        queue: 'snackrapido_queue',
+        queue: 'analytics_queue',
         queueOptions: {
           durable: true,
         },

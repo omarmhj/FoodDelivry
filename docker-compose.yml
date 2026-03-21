@@ -1,13 +1,11 @@
-version: '3.8'
-
 services:
   # MongoDB Database (Single Replica Set for Prisma - MongoDB 4.4)
   mongodb:
-    image: mongo:4.4
+    image: mongo:6.0
     container_name: snackrapido-mongodb
     restart: unless-stopped
     ports:
-      - "27017:27017"
+      - "27019:27017"
     command: ["--replSet", "rs0", "--bind_ip_all"]
     volumes:
       - mongodb_data:/data/db
@@ -20,7 +18,7 @@ services:
     container_name: snackrapido-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6380:6379"
     command: redis-server --appendonly yes --requirepass redis123 --loglevel verbose
     volumes:
       - redis_data:/data
@@ -33,8 +31,8 @@ services:
     container_name: snackrapido-rabbitmq
     restart: unless-stopped
     ports:
-      - "5672:5672"    # AMQP port
-      - "15672:15672"  # Management UI
+      - "5673:5672"    # AMQP port
+      - "15673:15672"  # Management UI
     environment:
       RABBITMQ_DEFAULT_USER: admin
       RABBITMQ_DEFAULT_PASS: rabbit123
@@ -55,9 +53,9 @@ services:
     container_name: snackrapido-mongo-express
     restart: unless-stopped
     ports:
-      - "8081:8081"
+      - "8091:8081"
     environment:
-      ME_CONFIG_MONGODB_URL: mongodb://mongodb:27017/
+      ME_CONFIG_MONGODB_URL: mongodb://snackrapido-mongodb:27017/?replicaSet=rs0&directConnection=true
       ME_CONFIG_BASICAUTH_USERNAME: admin
       ME_CONFIG_BASICAUTH_PASSWORD: admin123
     depends_on:
@@ -71,7 +69,7 @@ services:
     container_name: snackrapido-redis-commander
     restart: unless-stopped
     ports:
-      - "8082:8081"
+      - "8092:8081"
     environment:
       REDIS_HOSTS: local:redis:6379:0:redis123
     depends_on:

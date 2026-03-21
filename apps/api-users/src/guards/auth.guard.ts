@@ -7,7 +7,8 @@ import {
   import { GqlExecutionContext } from '@nestjs/graphql';
   import { JwtService } from '@nestjs/jwt';
   import { ConfigService } from '@nestjs/config';
-import {PrismaService} from "../../prisma/prisma.service";
+  import { PrismaService } from '../../prisma/prisma.service';
+  import { RedisService } from '../../../../libs/shared/src/redis.service';
   
   @Injectable()
   export class AuthGuard implements CanActivate {
@@ -15,6 +16,7 @@ import {PrismaService} from "../../prisma/prisma.service";
       private readonly jwtService: JwtService,
       private readonly prisma: PrismaService,
       private readonly config: ConfigService,
+      private readonly redisService: RedisService,
     ) {}
   
     async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -27,46 +29,66 @@ import {PrismaService} from "../../prisma/prisma.service";
       if (!accessToken || !refreshToken) {
         throw new UnauthorizedException('Please login to access this resource!');
       }
-  
-      if (accessToken) {
-        const decoded = this.jwtService.decode(accessToken);
-  
-        const expirationTime = decoded?.exp;
-  
-        if (expirationTime * 1000 < Date.now()) {
-          await this.updateAccessToken(req);
-        }
+
+      // Check if token is blacklisted (logged out)
+      const isBlacklisted = await this.redisService.exists(`bl:${accessToken}`);
+      if (isBlacklisted) {
+        throw new UnauthorizedException('Token has been revoked. Please login again.');
       }
   
-      return true;
+      try {
+        const decoded = this.jwtService.verify(accessToken, {
+          secret: this.config.get<string>('ACCESS_TOKEN_SECRET'),
+        });
+
+        const user = await this.prisma.user.findUnique({
+          where: { id: decoded.id },
+        });
+
+        if (!user) {
+          throw new UnauthorizedException('User not found!');
+        }
+
+        req.accesstoken = accessToken;
+        req.refreshtoken = refreshToken;
+        req.user = user;
+        return true;
+      } catch (error) {
+        if (error?.name === 'TokenExpiredError') {
+          await this.updateAccessToken(req);
+          return true;
+        }
+        throw new UnauthorizedException('Invalid or expired token!');
+      }
     }
   
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private async updateAccessToken(req: any): Promise<void> {
       try {
         const refreshTokenData = req.headers.refreshtoken as string;
-  
-        const decoded = this.jwtService.decode(refreshTokenData);
-  
-        const expirationTime = decoded.exp * 1000;
-  
-        if (expirationTime < Date.now()) {
-          throw new UnauthorizedException(
-            'Please login to access this resource!',
-          );
+
+        // Check if refresh token is blacklisted
+        const isBlacklisted = await this.redisService.exists(`bl:${refreshTokenData}`);
+        if (isBlacklisted) {
+          throw new UnauthorizedException('Session revoked. Please login again.');
         }
   
-        const user = await this.prisma.user.findUnique({
-          where: {
-            id: decoded.id,
-          },
+        const decoded = this.jwtService.verify(refreshTokenData, {
+          secret: this.config.get<string>('REFRESH_TOKEN_SECRET'),
         });
   
+        const user = await this.prisma.user.findUnique({
+          where: { id: decoded.id },
+        });
+
+        if (!user) {
+          throw new UnauthorizedException('User not found!');
+        }
+  
         const accessToken = this.jwtService.sign(
-          { id: user.id },
+          { id: user.id, email: user.email, role: user.role },
           {
             secret: this.config.get<string>('ACCESS_TOKEN_SECRET'),
-            expiresIn: '5m',
+            expiresIn: '15m',
           },
         );
   
@@ -82,7 +104,7 @@ import {PrismaService} from "../../prisma/prisma.service";
         req.refreshtoken = refreshToken;
         req.user = user;
       } catch (error) {
-        throw new UnauthorizedException(error.message);
+        throw new UnauthorizedException('Session expired. Please login again!');
       }
     }
   }

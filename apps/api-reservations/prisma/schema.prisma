@@ -1,0 +1,69 @@
+// Prisma Schema for Reservations Service
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../node_modules/.prisma/reservations-client"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  SEATED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+model Table {
+  id           String        @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId String        @db.ObjectId
+  tableNumber  String
+  capacity     Int
+  location     String?       // e.g., "indoor", "outdoor", "terrace", "private"
+  isActive     Boolean       @default(true)
+  reservations Reservation[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([restaurantId, tableNumber])
+  @@index([restaurantId])
+  @@index([capacity])
+  @@map("Table")
+}
+
+model Reservation {
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  reservationNumber String           @unique
+  customerId       String            @db.ObjectId
+  customerName     String
+  customerEmail    String
+  customerPhone    String?
+  restaurantId     String            @db.ObjectId
+  restaurantName   String
+  tableId          String            @db.ObjectId
+  table            Table             @relation(fields: [tableId], references: [id])
+  date             DateTime
+  startTime        String            // "19:00"
+  endTime          String            // "21:00"
+  partySize        Int
+  status           ReservationStatus @default(PENDING)
+  specialRequests  String?
+  notes            String?
+  cancelledBy      String?
+  cancellationReason String?
+  metadata         Json?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([customerId])
+  @@index([restaurantId])
+  @@index([tableId])
+  @@index([date])
+  @@index([status])
+  @@index([restaurantId, date])
+  @@map("Reservation")
+}

@@ -1,0 +1,441 @@
+{
+  "info": {
+    "name": "SnackRapido - Notifications Service",
+    "description": "Testing the Notifications microservice via the RabbitMQ Management HTTP API.\n\nThe notifications service is a pure RabbitMQ consumer (no HTTP server).\nMessages are published directly to the queue using the RabbitMQ Management API on port 15673.\n\nPrerequisites:\n1. Docker services running (docker-compose up -d)\n2. Notifications service running (npx nx serve api-notifications)\n3. RabbitMQ Management UI: http://localhost:15673 (admin/rabbit123)\n\nHow it works:\n- Each request publishes a JSON event to the notifications_queue\n- The notifications service picks it up via @EventPattern\n- Check service logs to verify processing\n- Check MongoDB (mongo-express: http://localhost:8091) to verify DB records",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "rabbitMqUrl",
+      "value": "http://localhost:15673"
+    },
+    {
+      "key": "rabbitMqUser",
+      "value": "admin"
+    },
+    {
+      "key": "rabbitMqPass",
+      "value": "rabbit123"
+    },
+    {
+      "key": "queue",
+      "value": "notifications_queue"
+    },
+    {
+      "key": "vhost",
+      "value": "%2F"
+    },
+    {
+      "key": "customerId",
+      "value": "PASTE_USER_ID_FROM_USERS_SERVICE"
+    },
+    {
+      "key": "restaurantId",
+      "value": "PASTE_RESTAURANT_ID"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "RabbitMQ Management API Health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('RabbitMQ Management API is reachable', () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 401]);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const res = pm.response.json();",
+                  "    pm.test('RabbitMQ is running', () => {",
+                  "        pm.expect(res).to.have.property('rabbitmq_version');",
+                  "    });",
+                  "    console.log('RabbitMQ version:', res.rabbitmq_version);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{rabbitMqUser}}" },
+                { "key": "password", "value": "{{rabbitMqPass}}" }
+              ]
+            },
+            "url": {
+              "raw": "{{rabbitMqUrl}}/api/overview",
+              "host": ["{{rabbitMqUrl}}"],
+              "path": ["api", "overview"]
+            },
+            "description": "Verify the RabbitMQ Management API is accessible. Should return RabbitMQ version info."
+          }
+        },
+        {
+          "name": "Check Notifications Queue",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Queue info retrieved', () => {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const q = pm.response.json();",
+                  "    console.log('Queue:', q.name);",
+                  "    console.log('Messages ready:', q.messages_ready);",
+                  "    console.log('Consumers:', q.consumers);",
+                  "    pm.test('Notifications service is consuming (consumers > 0)', () => {",
+                  "        pm.expect(q.consumers).to.be.greaterThan(0);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{rabbitMqUser}}" },
+                { "key": "password", "value": "{{rabbitMqPass}}" }
+              ]
+            },
+            "url": {
+              "raw": "{{rabbitMqUrl}}/api/queues/{{vhost}}/{{queue}}",
+              "host": ["{{rabbitMqUrl}}"],
+              "path": ["api", "queues", "{{vhost}}", "{{queue}}"]
+            },
+            "description": "Check the notifications_queue status. 'consumers' should be > 0 when the notifications service is running."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Order Events",
+      "description": "Publish order-related events to trigger notifications",
+      "item": [
+        {
+          "name": "1. order.placed",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Event published successfully', () => {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "});",
+                  "console.log('✅ order.placed event published. Check notifications service logs.');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{rabbitMqUser}}" },
+                { "key": "password", "value": "{{rabbitMqPass}}" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"routing_key\": \"notifications_queue\",\n  \"payload\": \"{\\\"pattern\\\":\\\"order.placed\\\",\\\"data\\\":{\\\"orderId\\\":\\\"order_001\\\",\\\"orderNumber\\\":\\\"ORD-2026-001\\\",\\\"customerId\\\":\\\"{{customerId}}\\\",\\\"total\\\":\\\"45.99 TND\\\",\\\"deliveryType\\\":\\\"DELIVERY\\\",\\\"deliveryAddress\\\":\\\"123 Main St, Tunis\\\",\\\"metadata\\\":{\\\"customerEmail\\\":\\\"testuser@example.com\\\",\\\"customerName\\\":\\\"Test User\\\",\\\"restaurantName\\\":\\\"Pizza Palace\\\",\\\"estimatedDeliveryTime\\\":\\\"2026-03-21T14:30:00Z\\\"}}}\",\n  \"payload_encoding\": \"string\",\n  \"properties\": {\n    \"content_type\": \"application/json\",\n    \"delivery_mode\": 2\n  }\n}",
+              "options": {
+                "raw": { "language": "json" }
+              }
+            },
+            "url": {
+              "raw": "{{rabbitMqUrl}}/api/exchanges/{{vhost}}//publish",
+              "host": ["{{rabbitMqUrl}}"],
+              "path": ["api", "exchanges", "{{vhost}}", "", "publish"]
+            },
+            "description": "Publishes an order.placed event. The notifications service will:\n1. Create a Notification record in MongoDB\n2. Send an email to the customer (if SMTP configured)\n3. Log a push notification (mock)\n\nCheck service logs for: '📦 Order placed event received'"
+          }
+        },
+        {
+          "name": "2. order.status.updated — CONFIRMED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Event published successfully', () => {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "});",
+                  "console.log('✅ order.status.updated (CONFIRMED) event published.');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{rabbitMqUser}}" },
+                { "key": "password", "value": "{{rabbitMqPass}}" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"routing_key\": \"notifications_queue\",\n  \"payload\": \"{\\\"pattern\\\":\\\"order.status.updated\\\",\\\"data\\\":{\\\"orderId\\\":\\\"order_001\\\",\\\"orderNumber\\\":\\\"ORD-2026-001\\\",\\\"customerId\\\":\\\"{{customerId}}\\\",\\\"status\\\":\\\"CONFIRMED\\\",\\\"previousStatus\\\":\\\"PENDING\\\",\\\"customerEmail\\\":\\\"testuser@example.com\\\"}}\",\n  \"payload_encoding\": \"string\",\n  \"properties\": {\n    \"content_type\": \"application/json\",\n    \"delivery_mode\": 2\n  }\n}",
+              "options": {
+                "raw": { "language": "json" }
+              }
+            },
+            "url": {
+              "raw": "{{rabbitMqUrl}}/api/exchanges/{{vhost}}//publish",
+              "host": ["{{rabbitMqUrl}}"],
+              "path": ["api", "exchanges", "{{vhost}}", "", "publish"]
+            },
+            "description": "Publishes an order.status.updated event with status CONFIRMED. This is an 'important' status so an email will be sent."
+          }
+        },
+        {
+          "name": "3. order.status.updated — OUT_FOR_DELIVERY",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{rabbitMqUser}}" },
+                { "key": "password", "value": "{{rabbitMqPass}}" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"routing_key\": \"notifications_queue\",\n  \"payload\": \"{\\\"pattern\\\":\\\"order.status.updated\\\",\\\"data\\\":{\\\"orderId\\\":\\\"order_001\\\",\\\"orderNumber\\\":\\\"ORD-2026-001\\\",\\\"customerId\\\":\\\"{{customerId}}\\\",\\\"status\\\":\\\"OUT_FOR_DELIVERY\\\",\\\"previousStatus\\\":\\\"PREPARING\\\",\\\"customerEmail\\\":\\\"testuser@example.com\\\"}}\",\n  \"payload_encoding\": \"string\",\n  \"properties\": {\n    \"content_type\": \"application/json\",\n    \"delivery_mode\": 2\n  }\n}",
+              "options": {
+                "raw": { "language": "json" }
+              }
+            },
+            "url": {
+              "raw": "{{rabbitMqUrl}}/api/exchanges/{{vhost}}//publish",
+              "host": ["{{rabbitMqUrl}}"],
+              "path": ["api", "exchanges", "{{vhost}}", "", "publish"]
+            },
+            "description": "Publishes order.status.updated with status OUT_FOR_DELIVERY."
+          }
+        },
+        {
+          "name": "4. order.status.updated — DELIVERED",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{rabbitMqUser}}" },
+                { "key": "password", "value": "{{rabbitMqPass}}" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"routing_key\": \"notifications_queue\",\n  \"payload\": \"{\\\"pattern\\\":\\\"order.status.updated\\\",\\\"data\\\":{\\\"orderId\\\":\\\"order_001\\\",\\\"orderNumber\\\":\\\"ORD-2026-001\\\",\\\"customerId\\\":\\\"{{customerId}}\\\",\\\"status\\\":\\\"DELIVERED\\\",\\\"previousStatus\\\":\\\"OUT_FOR_DELIVERY\\\",\\\"customerEmail\\\":\\\"testuser@example.com\\\"}}\",\n  \"payload_encoding\": \"string\",\n  \"properties\": {\n    \"content_type\": \"application/json\",\n    \"delivery_mode\": 2\n  }\n}",
+              "options": {
+                "raw": { "language": "json" }
+              }
+            },
+            "url": {
+              "raw": "{{rabbitMqUrl}}/api/exchanges/{{vhost}}//publish",
+              "host": ["{{rabbitMqUrl}}"],
+              "path": ["api", "exchanges", "{{vhost}}", "", "publish"]
+            },
+            "description": "Publishes order.status.updated with status DELIVERED."
+          }
+        },
+        {
+          "name": "5. order.cancelled",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{rabbitMqUser}}" },
+                { "key": "password", "value": "{{rabbitMqPass}}" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"routing_key\": \"notifications_queue\",\n  \"payload\": \"{\\\"pattern\\\":\\\"order.cancelled\\\",\\\"data\\\":{\\\"orderId\\\":\\\"order_001\\\",\\\"orderNumber\\\":\\\"ORD-2026-001\\\",\\\"customerId\\\":\\\"{{customerId}}\\\",\\\"metadata\\\":{\\\"customerEmail\\\":\\\"testuser@example.com\\\"}}}\",\n  \"payload_encoding\": \"string\",\n  \"properties\": {\n    \"content_type\": \"application/json\",\n    \"delivery_mode\": 2\n  }\n}",
+              "options": {
+                "raw": { "language": "json" }
+              }
+            },
+            "url": {
+              "raw": "{{rabbitMqUrl}}/api/exchanges/{{vhost}}//publish",
+              "host": ["{{rabbitMqUrl}}"],
+              "path": ["api", "exchanges", "{{vhost}}", "", "publish"]
+            },
+            "description": "Publishes an order.cancelled event. Internally delegates to handleOrderStatusUpdated with status CANCELLED."
+          }
+        },
+        {
+          "name": "6. order.reviewed",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{rabbitMqUser}}" },
+                { "key": "password", "value": "{{rabbitMqPass}}" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"routing_key\": \"notifications_queue\",\n  \"payload\": \"{\\\"pattern\\\":\\\"order.reviewed\\\",\\\"data\\\":{\\\"orderId\\\":\\\"order_001\\\",\\\"restaurantId\\\":\\\"{{restaurantId}}\\\",\\\"rating\\\":4,\\\"comment\\\":\\\"Great food, fast delivery!\\\"}}\",\n  \"payload_encoding\": \"string\",\n  \"properties\": {\n    \"content_type\": \"application/json\",\n    \"delivery_mode\": 2\n  }\n}",
+              "options": {
+                "raw": { "language": "json" }
+              }
+            },
+            "url": {
+              "raw": "{{rabbitMqUrl}}/api/exchanges/{{vhost}}//publish",
+              "host": ["{{rabbitMqUrl}}"],
+              "path": ["api", "exchanges", "{{vhost}}", "", "publish"]
+            },
+            "description": "Publishes an order.reviewed event. Notifies the restaurant about the new review."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reservation Events",
+      "description": "Publish reservation-related events to trigger notifications",
+      "item": [
+        {
+          "name": "1. reservation.created",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Event published successfully', () => {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "});",
+                  "console.log('✅ reservation.created event published.');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{rabbitMqUser}}" },
+                { "key": "password", "value": "{{rabbitMqPass}}" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"routing_key\": \"notifications_queue\",\n  \"payload\": \"{\\\"pattern\\\":\\\"reservation.created\\\",\\\"data\\\":{\\\"reservationId\\\":\\\"res_001\\\",\\\"reservationNumber\\\":\\\"RES-2026-001\\\",\\\"customerId\\\":\\\"{{customerId}}\\\",\\\"customerEmail\\\":\\\"testuser@example.com\\\",\\\"customerName\\\":\\\"Test User\\\",\\\"restaurantName\\\":\\\"Pizza Palace\\\",\\\"date\\\":\\\"2026-03-25T00:00:00Z\\\",\\\"startTime\\\":\\\"19:00\\\",\\\"endTime\\\":\\\"21:00\\\",\\\"partySize\\\":4,\\\"tableNumber\\\":\\\"T-5\\\"}}\",\n  \"payload_encoding\": \"string\",\n  \"properties\": {\n    \"content_type\": \"application/json\",\n    \"delivery_mode\": 2\n  }\n}",
+              "options": {
+                "raw": { "language": "json" }
+              }
+            },
+            "url": {
+              "raw": "{{rabbitMqUrl}}/api/exchanges/{{vhost}}//publish",
+              "host": ["{{rabbitMqUrl}}"],
+              "path": ["api", "exchanges", "{{vhost}}", "", "publish"]
+            },
+            "description": "Publishes a reservation.created event. Creates a notification and sends a confirmation email."
+          }
+        },
+        {
+          "name": "2. reservation.confirmed",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{rabbitMqUser}}" },
+                { "key": "password", "value": "{{rabbitMqPass}}" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"routing_key\": \"notifications_queue\",\n  \"payload\": \"{\\\"pattern\\\":\\\"reservation.confirmed\\\",\\\"data\\\":{\\\"reservationId\\\":\\\"res_001\\\",\\\"reservationNumber\\\":\\\"RES-2026-001\\\",\\\"customerId\\\":\\\"{{customerId}}\\\",\\\"customerEmail\\\":\\\"testuser@example.com\\\",\\\"restaurantName\\\":\\\"Pizza Palace\\\"}}\",\n  \"payload_encoding\": \"string\",\n  \"properties\": {\n    \"content_type\": \"application/json\",\n    \"delivery_mode\": 2\n  }\n}",
+              "options": {
+                "raw": { "language": "json" }
+              }
+            },
+            "url": {
+              "raw": "{{rabbitMqUrl}}/api/exchanges/{{vhost}}//publish",
+              "host": ["{{rabbitMqUrl}}"],
+              "path": ["api", "exchanges", "{{vhost}}", "", "publish"]
+            },
+            "description": "Publishes a reservation.confirmed event."
+          }
+        },
+        {
+          "name": "3. reservation.cancelled",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{rabbitMqUser}}" },
+                { "key": "password", "value": "{{rabbitMqPass}}" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"routing_key\": \"notifications_queue\",\n  \"payload\": \"{\\\"pattern\\\":\\\"reservation.cancelled\\\",\\\"data\\\":{\\\"reservationId\\\":\\\"res_001\\\",\\\"reservationNumber\\\":\\\"RES-2026-001\\\",\\\"customerId\\\":\\\"{{customerId}}\\\",\\\"customerEmail\\\":\\\"testuser@example.com\\\",\\\"restaurantName\\\":\\\"Pizza Palace\\\",\\\"reason\\\":\\\"Restaurant fully booked\\\"}}\",\n  \"payload_encoding\": \"string\",\n  \"properties\": {\n    \"content_type\": \"application/json\",\n    \"delivery_mode\": 2\n  }\n}",
+              "options": {
+                "raw": { "language": "json" }
+              }
+            },
+            "url": {
+              "raw": "{{rabbitMqUrl}}/api/exchanges/{{vhost}}//publish",
+              "host": ["{{rabbitMqUrl}}"],
+              "path": ["api", "exchanges", "{{vhost}}", "", "publish"]
+            },
+            "description": "Publishes a reservation.cancelled event with a cancellation reason."
+          }
+        }
+      ]
+    }
+  ]
+}

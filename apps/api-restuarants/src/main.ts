@@ -34,7 +34,13 @@ async function bootstrap() {
   app.setViewEngine("ejs");
 
   app.enableCors({
-    origin: "*",
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:4000',
+      'https://studio.apollographql.com',
+    ],
+    credentials: true,
   });
 
   // Start all microservices and wait for connection

@@ -9,33 +9,32 @@ export class RabbitMQService {
     private readonly client: ClientProxy,
     @Inject('NOTIFICATIONS_SERVICE')
     private readonly notificationsClient: ClientProxy,
+    @Inject('ANALYTICS_SERVICE')
+    private readonly analyticsClient: ClientProxy,
   ) {}
 
   /**
    * Send a message to RabbitMQ queue
    */
   sendMessage<T = any>(pattern: string | object, data: T): Observable<any> {
-    return this.client.send(pattern, data).pipe(timeout(30000)); // Increased to 30 seconds
+    return this.client.send(pattern, data).pipe(timeout(30000));
   }
 
   /**
-   * Emit an event to RabbitMQ
+   * Emit an event to both notifications and analytics queues
    */
   emitEvent<T = any>(pattern: string, data: T): void {
     try {
-      console.log(`🐰 RabbitMQ: Emitting event "${pattern}" to notifications_queue`);
-      console.log(`📤 Event data:`, JSON.stringify(data, null, 2));
-      
-      if (!this.notificationsClient) {
-        console.error(`❌ RabbitMQ: notificationsClient is not initialized!`);
-        return;
+      // Emit to notifications queue
+      if (this.notificationsClient) {
+        this.notificationsClient.emit(pattern, data);
       }
-      
-      this.notificationsClient.emit(pattern, data);
-      console.log(`✅ Event "${pattern}" emitted successfully`);
+      // Emit to analytics queue
+      if (this.analyticsClient) {
+        this.analyticsClient.emit(pattern, data);
+      }
     } catch (error) {
-      console.error(`❌ RabbitMQ: Failed to emit event "${pattern}":`, error);
-      console.error(`❌ Error details:`, error.message);
+      console.error(`❌ RabbitMQ: Failed to emit event "${pattern}":`, error.message);
     }
   }
 

@@ -84,6 +84,7 @@ export class UsersResolver {
   }
 
   @Query(() => [User])
+  @UseGuards(AuthGuard)
   async getUsers() {
     return this.userService.getUsers();
   }

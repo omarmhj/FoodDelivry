@@ -88,6 +88,10 @@ model Order {
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
   
+  @@index([customerId])
+  @@index([restaurantId])
+  @@index([status])
+  @@index([createdAt])
   @@map("Order")
 }
 
@@ -139,6 +143,8 @@ model OrderStatusHistory {
   timestamp   DateTime    @default(now())
   metadata    Json?
   
+  @@index([orderId])
+  @@index([status])
   @@map("OrderStatusHistory")
 }
 
@@ -162,8 +168,11 @@ model OrderReview {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
+  @@index([customerId])
+  @@index([restaurantId])
   @@map("OrderReview")
 }
+
 
 
 
