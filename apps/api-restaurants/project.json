@@ -1,0 +1,53 @@
+{
+  "name": "api-restaurants",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/api-restaurants/src",
+  "projectType": "application",
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/api-restaurants",
+        "main": "apps/api-restaurants/src/main.ts",
+        "tsConfig": "apps/api-restaurants/tsconfig.app.json",
+        "assets": ["apps/api-restaurants/src/assets"],
+        "webpackConfig": "apps/api-restaurants/webpack.config.js"
+      },
+      "configurations": {
+        "development": {},
+        "production": {}
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "options": {
+        "buildTarget": "api-restaurants:build"
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "api-restaurants:build:development"
+        },
+        "production": {
+          "buildTarget": "api-restaurants:build:production"
+        }
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "apps/api-restaurants/jest.config.ts"
+      }
+    }
+  },
+  "tags": []
+}

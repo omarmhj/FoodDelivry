@@ -1,0 +1,124 @@
+@startuml Medical Exam Platform - Final
+
+' ============================================
+' USER
+' ============================================
+
+class User {
+  - id: string
+  - email: string
+  - name: string
+  - university: string
+  - subscription: string
+}
+
+' ============================================
+' CONTENT HIERARCHY
+' ============================================
+
+class Specialty {
+  - id: string
+  - name: string
+}
+
+class Topic {
+  - id: string
+  - specialtyId: string
+  - name: string
+}
+
+class Series {
+  - id: string
+  - topicId: string
+  - title: string
+  - type: string
+  - university: string
+  - year: number
+}
+
+' ============================================
+' QUESTIONS & ANSWERS
+' ============================================
+
+class Question {
+  - id: string
+  - seriesId: string
+  - text: string
+  - imageUrl: string
+}
+
+class Answer {
+  - id: string
+  - questionId: string
+  - text: string
+  - isCorrect: boolean
+  - explanation: string
+  - courseReferences: JSON
+}
+
+' ============================================
+' COURSES (For AI Training & References)
+' ============================================
+
+class Course {
+  - id: string
+  - topicId: string
+  - title: string
+  - content: JSON
+  - fileUrl: string
+}
+
+' ============================================
+' USER ACTIVITY
+' ============================================
+
+class Attempt {
+  - id: string
+  - userId: string
+  - seriesId: string
+  - score: number
+  - answers: JSON
+  - completedAt: Date
+}
+
+' ============================================
+' AI BATCH GENERATION
+' ============================================
+
+class BatchJob {
+  - id: string
+  - topicId: string
+  - status: string
+  - params: JSON
+  - createdAt: Date
+}
+
+' ============================================
+' ANALYTICS (Simple)
+' ============================================
+
+class UserStats {
+  - id: string
+  - userId: string
+  - topicId: string
+  - totalAttempts: number
+  - averageScore: number
+  - weakAreas: JSON
+}
+
+' ============================================
+' RELATIONSHIPS
+' ============================================
+
+Specialty "1" -- "*" Topic
+Topic "1" -- "*" Series
+Topic "1" -- "*" Course
+Series "1" -- "*" Question
+Question "1" -- "*" Answer
+Answer "*" -- "*" Course : references
+User "1" -- "*" Attempt
+User "1" -- "*" UserStats
+Attempt "*" -- "1" Series
+BatchJob "1" -- "*" Series : generates
+
+@enduml

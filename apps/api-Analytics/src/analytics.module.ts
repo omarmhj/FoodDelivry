@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloFederationDriver, ApolloFederationDriverConfig } from '@nestjs/apollo';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -34,6 +34,7 @@ import { RedisService } from '../../../libs/shared/src/redis.service';
     AnalyticsScheduler,
     PrismaService,
     RedisService,
+    ConfigService,
   ],
   exports: [AnalyticsService],
 })

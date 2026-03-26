@@ -1,0 +1,486 @@
+{
+  "info": {
+    "name": "SnackRapido - Reservations Service",
+    "description": "GraphQL API for the Reservations Service (port 4004). Requires api-users and api-restaurants running. Table management requires restaurant auth token. Reservation creation requires user auth token.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:4004/graphql" },
+    { "key": "user_access_token", "value": "" },
+    { "key": "restaurant_access_token", "value": "" },
+    { "key": "reservation_id", "value": "" },
+    { "key": "table_id", "value": "" },
+    { "key": "customer_id", "value": "" },
+    { "key": "restaurant_id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Availability",
+      "item": [
+        {
+          "name": "Check Availability (Public)",
+          "description": "No auth required. Check if tables are available for a given restaurant, date, time, and party size.",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query CheckAvailability($checkAvailabilityDto: CheckAvailabilityDto!) {\n  checkAvailability(checkAvailabilityDto: $checkAvailabilityDto) {\n    available\n    error { message }\n    availableTables {\n      id\n      tableNumber\n      capacity\n      location\n      isActive\n    }\n  }\n}",
+                "variables": "{\n  \"checkAvailabilityDto\": {\n    \"restaurantId\": \"{{restaurant_id}}\",\n    \"date\": \"2026-03-25\",\n    \"startTime\": \"19:00\",\n    \"endTime\": \"21:00\",\n    \"partySize\": 2\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Check Availability - Large Party",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query CheckAvailability($checkAvailabilityDto: CheckAvailabilityDto!) {\n  checkAvailability(checkAvailabilityDto: $checkAvailabilityDto) {\n    available\n    availableTables {\n      id\n      tableNumber\n      capacity\n      location\n    }\n  }\n}",
+                "variables": "{\n  \"checkAvailabilityDto\": {\n    \"restaurantId\": \"{{restaurant_id}}\",\n    \"date\": \"2026-03-25\",\n    \"startTime\": \"20:00\",\n    \"endTime\": \"22:00\",\n    \"partySize\": 6\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Table Management (Restaurant Auth)",
+      "description": "These endpoints require a restaurant access token in the access-token header.",
+      "item": [
+        {
+          "name": "Create Table",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "const tableId = res?.data?.createTable?.table?.id;",
+                  "if (tableId) {",
+                  "  pm.collectionVariables.set('table_id', tableId);",
+                  "  console.log('table_id saved:', tableId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{restaurant_access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateTable($createTableDto: CreateTableDto!) {\n  createTable(createTableDto: $createTableDto) {\n    message\n    error { message code }\n    table {\n      id\n      tableNumber\n      capacity\n      location\n      isActive\n      restaurantId\n      createdAt\n    }\n  }\n}",
+                "variables": "{\n  \"createTableDto\": {\n    \"tableNumber\": \"T1\",\n    \"capacity\": 4,\n    \"location\": \"indoor\"\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Create Table - Outdoor",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{restaurant_access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateTable($createTableDto: CreateTableDto!) {\n  createTable(createTableDto: $createTableDto) {\n    message\n    error { message code }\n    table {\n      id\n      tableNumber\n      capacity\n      location\n    }\n  }\n}",
+                "variables": "{\n  \"createTableDto\": {\n    \"tableNumber\": \"T2\",\n    \"capacity\": 2,\n    \"location\": \"outdoor\"\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Create Table - Private Room",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{restaurant_access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateTable($createTableDto: CreateTableDto!) {\n  createTable(createTableDto: $createTableDto) {\n    message\n    error { message code }\n    table {\n      id\n      tableNumber\n      capacity\n      location\n    }\n  }\n}",
+                "variables": "{\n  \"createTableDto\": {\n    \"tableNumber\": \"VIP-1\",\n    \"capacity\": 10,\n    \"location\": \"private\"\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Get Restaurant Tables",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{restaurant_access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetRestaurantTables($restaurantId: String!) {\n  getRestaurantTables(restaurantId: $restaurantId) {\n    error { message code }\n    tables {\n      id\n      tableNumber\n      capacity\n      location\n      isActive\n      restaurantId\n      createdAt\n    }\n  }\n}",
+                "variables": "{\n  \"restaurantId\": \"{{restaurant_id}}\"\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Update Table",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{restaurant_access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateTable($updateTableDto: UpdateTableDto!) {\n  updateTable(updateTableDto: $updateTableDto) {\n    message\n    error { message code }\n    table {\n      id\n      tableNumber\n      capacity\n      location\n      isActive\n    }\n  }\n}",
+                "variables": "{\n  \"updateTableDto\": {\n    \"id\": \"{{table_id}}\",\n    \"capacity\": 6,\n    \"location\": \"terrace\"\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Deactivate Table",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{restaurant_access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateTable($updateTableDto: UpdateTableDto!) {\n  updateTable(updateTableDto: $updateTableDto) {\n    message\n    error { message code }\n    table {\n      id\n      tableNumber\n      isActive\n    }\n  }\n}",
+                "variables": "{\n  \"updateTableDto\": {\n    \"id\": \"{{table_id}}\",\n    \"isActive\": false\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Delete Table",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{restaurant_access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation DeleteTable($deleteTableDto: DeleteTableDto!) {\n  deleteTable(deleteTableDto: $deleteTableDto) {\n    message\n    error { message code }\n  }\n}",
+                "variables": "{\n  \"deleteTableDto\": {\n    \"id\": \"{{table_id}}\"\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reservations (User Auth)",
+      "description": "These endpoints require a user access token.",
+      "item": [
+        {
+          "name": "Create Reservation (Auto-assign Table)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "const reservationId = res?.data?.createReservation?.reservation?.id;",
+                  "if (reservationId) {",
+                  "  pm.collectionVariables.set('reservation_id', reservationId);",
+                  "  console.log('reservation_id saved:', reservationId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{user_access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateReservation($createReservationDto: CreateReservationDto!) {\n  createReservation(createReservationDto: $createReservationDto) {\n    message\n    error { message code }\n    reservation {\n      id\n      reservationNumber\n      status\n      customerName\n      customerEmail\n      restaurantName\n      date\n      startTime\n      endTime\n      partySize\n      specialRequests\n      createdAt\n      table {\n        id\n        tableNumber\n        capacity\n        location\n      }\n    }\n  }\n}",
+                "variables": "{\n  \"createReservationDto\": {\n    \"customerId\": \"{{customer_id}}\",\n    \"customerName\": \"John Doe\",\n    \"customerEmail\": \"john@example.com\",\n    \"customerPhone\": \"+1234567890\",\n    \"restaurantId\": \"{{restaurant_id}}\",\n    \"restaurantName\": \"Test Restaurant\",\n    \"date\": \"2026-03-25\",\n    \"startTime\": \"19:00\",\n    \"endTime\": \"21:00\",\n    \"partySize\": 2,\n    \"specialRequests\": \"Window seat preferred\"\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Create Reservation (Specific Table)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{user_access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateReservation($createReservationDto: CreateReservationDto!) {\n  createReservation(createReservationDto: $createReservationDto) {\n    message\n    error { message code }\n    reservation {\n      id\n      reservationNumber\n      status\n      date\n      startTime\n      endTime\n      partySize\n      table {\n        tableNumber\n        capacity\n        location\n      }\n    }\n  }\n}",
+                "variables": "{\n  \"createReservationDto\": {\n    \"customerId\": \"{{customer_id}}\",\n    \"customerName\": \"Jane Smith\",\n    \"customerEmail\": \"jane@example.com\",\n    \"restaurantId\": \"{{restaurant_id}}\",\n    \"restaurantName\": \"Test Restaurant\",\n    \"date\": \"2026-03-26\",\n    \"startTime\": \"20:00\",\n    \"endTime\": \"22:00\",\n    \"partySize\": 4,\n    \"tableId\": \"{{table_id}}\"\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Get Reservation By ID",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{user_access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetReservationById($reservationId: String!) {\n  getReservationById(reservationId: $reservationId) {\n    id\n    reservationNumber\n    status\n    customerName\n    customerEmail\n    customerPhone\n    restaurantName\n    date\n    startTime\n    endTime\n    partySize\n    specialRequests\n    notes\n    cancelledBy\n    cancellationReason\n    createdAt\n    updatedAt\n    table {\n      id\n      tableNumber\n      capacity\n      location\n    }\n  }\n}",
+                "variables": "{\n  \"reservationId\": \"{{reservation_id}}\"\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Get All Reservations",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{user_access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetReservations($filterDto: GetReservationsFilterDto) {\n  getReservations(filterDto: $filterDto) {\n    total\n    limit\n    skip\n    error { message }\n    reservations {\n      id\n      reservationNumber\n      status\n      customerName\n      restaurantName\n      date\n      startTime\n      endTime\n      partySize\n      table {\n        tableNumber\n        capacity\n      }\n    }\n  }\n}",
+                "variables": "{\n  \"filterDto\": {\n    \"limit\": 20,\n    \"skip\": 0\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Get Reservations - Filter by Date",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{user_access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetReservations($filterDto: GetReservationsFilterDto) {\n  getReservations(filterDto: $filterDto) {\n    total\n    reservations {\n      id\n      reservationNumber\n      status\n      customerName\n      date\n      startTime\n      endTime\n      partySize\n    }\n  }\n}",
+                "variables": "{\n  \"filterDto\": {\n    \"date\": \"2026-03-25\",\n    \"limit\": 20,\n    \"skip\": 0\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Get Reservations - Filter by Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{user_access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetReservations($filterDto: GetReservationsFilterDto) {\n  getReservations(filterDto: $filterDto) {\n    total\n    reservations {\n      id\n      reservationNumber\n      status\n      customerName\n      date\n      startTime\n      endTime\n    }\n  }\n}",
+                "variables": "{\n  \"filterDto\": {\n    \"status\": \"PENDING\",\n    \"limit\": 20,\n    \"skip\": 0\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}","host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Get Customer Reservations",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{user_access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetCustomerReservations($customerId: String!, $limit: Int, $skip: Int) {\n  getCustomerReservations(customerId: $customerId, limit: $limit, skip: $skip) {\n    total\n    limit\n    skip\n    reservations {\n      id\n      reservationNumber\n      status\n      restaurantName\n      date\n      startTime\n      endTime\n      partySize\n    }\n  }\n}",
+                "variables": "{\n  \"customerId\": \"{{customer_id}}\",\n  \"limit\": 20,\n  \"skip\": 0\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Get Restaurant Reservations",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{restaurant_access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetRestaurantReservations($restaurantId: String!, $date: String, $limit: Int, $skip: Int) {\n  getRestaurantReservations(restaurantId: $restaurantId, date: $date, limit: $limit, skip: $skip) {\n    total\n    limit\n    skip\n    reservations {\n      id\n      reservationNumber\n      status\n      customerName\n      customerEmail\n      date\n      startTime\n      endTime\n      partySize\n      specialRequests\n      table {\n        tableNumber\n        capacity\n        location\n      }\n    }\n  }\n}",
+                "variables": "{\n  \"restaurantId\": \"{{restaurant_id}}\",\n  \"date\": \"2026-03-25\",\n  \"limit\": 20,\n  \"skip\": 0\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reservation Status Flow",
+      "description": "Status transitions: PENDING → CONFIRMED → SEATED → COMPLETED. PENDING/CONFIRMED can be CANCELLED. CONFIRMED can be NO_SHOW.",
+      "item": [
+        {
+          "name": "Confirm Reservation (PENDING → CONFIRMED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{restaurant_access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateReservationStatus($updateStatusDto: UpdateReservationStatusDto!) {\n  updateReservationStatus(updateStatusDto: $updateStatusDto) {\n    message\n    error { message code }\n    reservation {\n      id\n      reservationNumber\n      status\n      updatedAt\n    }\n  }\n}",
+                "variables": "{\n  \"updateStatusDto\": {\n    \"reservationId\": \"{{reservation_id}}\",\n    \"status\": \"CONFIRMED\",\n    \"reason\": \"Reservation confirmed by restaurant\"\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Seat Guests (CONFIRMED → SEATED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{restaurant_access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateReservationStatus($updateStatusDto: UpdateReservationStatusDto!) {\n  updateReservationStatus(updateStatusDto: $updateStatusDto) {\n    message\n    error { message code }\n    reservation {\n      id\n      reservationNumber\n      status\n      updatedAt\n    }\n  }\n}",
+                "variables": "{\n  \"updateStatusDto\": {\n    \"reservationId\": \"{{reservation_id}}\",\n    \"status\": \"SEATED\",\n    \"reason\": \"Guests have been seated\"\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Complete Reservation (SEATED → COMPLETED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{restaurant_access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateReservationStatus($updateStatusDto: UpdateReservationStatusDto!) {\n  updateReservationStatus(updateStatusDto: $updateStatusDto) {\n    message\n    error { message code }\n    reservation {\n      id\n      reservationNumber\n      status\n      updatedAt\n    }\n  }\n}",
+                "variables": "{\n  \"updateStatusDto\": {\n    \"reservationId\": \"{{reservation_id}}\",\n    \"status\": \"COMPLETED\"\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Mark No Show (CONFIRMED → NO_SHOW)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{restaurant_access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateReservationStatus($updateStatusDto: UpdateReservationStatusDto!) {\n  updateReservationStatus(updateStatusDto: $updateStatusDto) {\n    message\n    error { message code }\n    reservation {\n      id\n      reservationNumber\n      status\n      updatedAt\n    }\n  }\n}",
+                "variables": "{\n  \"updateStatusDto\": {\n    \"reservationId\": \"{{reservation_id}}\",\n    \"status\": \"NO_SHOW\",\n    \"reason\": \"Customer did not arrive\"\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Cancel Reservation (by Customer)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{user_access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CancelReservation($cancelReservationDto: CancelReservationDto!) {\n  cancelReservation(cancelReservationDto: $cancelReservationDto) {\n    message\n    error { message code }\n    reservation {\n      id\n      reservationNumber\n      status\n      cancellationReason\n      cancelledBy\n      updatedAt\n    }\n  }\n}",
+                "variables": "{\n  \"cancelReservationDto\": {\n    \"reservationId\": \"{{reservation_id}}\",\n    \"reason\": \"Change of plans\",\n    \"cancelledBy\": \"{{customer_id}}\"\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Cancel Reservation (by Restaurant)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{restaurant_access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CancelReservation($cancelReservationDto: CancelReservationDto!) {\n  cancelReservation(cancelReservationDto: $cancelReservationDto) {\n    message\n    error { message code }\n    reservation {\n      id\n      reservationNumber\n      status\n      cancellationReason\n      cancelledBy\n    }\n  }\n}",
+                "variables": "{\n  \"cancelReservationDto\": {\n    \"reservationId\": \"{{reservation_id}}\",\n    \"reason\": \"Restaurant closed for private event\",\n    \"cancelledBy\": \"{{restaurant_id}}\"\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        }
+      ]
+    }
+  ]
+}

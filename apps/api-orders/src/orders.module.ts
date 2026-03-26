@@ -16,7 +16,7 @@ import { SharedModule } from '../../../libs/shared/src/shared.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env.local', '.env'],
+      envFilePath: ['apps/api-orders/.env.local', 'apps/api-orders/.env'],
     }),
     GraphQLModule.forRoot<ApolloFederationDriverConfig>({
       driver: ApolloFederationDriver,

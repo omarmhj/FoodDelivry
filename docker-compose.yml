@@ -63,15 +63,13 @@ services:
     networks:
       - snackrapido-network
 
-  # Redis Commander (Optional - Redis Admin UI)
-  redis-commander:
-    image: rediscommander/redis-commander:latest
-    container_name: snackrapido-redis-commander
+  # RedisInsight - Redis Admin UI (replaces redis-commander)
+  redisinsight:
+    image: redis/redisinsight:latest
+    container_name: snackrapido-redisinsight
     restart: unless-stopped
     ports:
-      - "8092:8081"
-    environment:
-      REDIS_HOSTS: local:redis:6379:0:redis123
+      - "8093:5540"
     depends_on:
       - redis
     networks:

@@ -1,0 +1,356 @@
+{
+  "info": {
+    "name": "SnackRapido - Orders Service",
+    "description": "GraphQL API for the Orders Service (port 4002). Requires api-users and api-restaurants running. All mutations/queries require a valid access token.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:4002/graphql" },
+    { "key": "access_token", "value": "" },
+    { "key": "order_id", "value": "" },
+    { "key": "customer_id", "value": "" },
+    { "key": "restaurant_id", "value": "" },
+    { "key": "menu_item_id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "Create Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "const orderId = res?.data?.createOrder?.order?.id;",
+                  "if (orderId) {",
+                  "  pm.collectionVariables.set('order_id', orderId);",
+                  "  console.log('order_id saved:', orderId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateOrder($createOrderDto: CreateOrderDto!) {\n  createOrder(createOrderDto: $createOrderDto) {\n    message\n    error { message code }\n    order {\n      id\n      orderNumber\n      status\n      paymentStatus\n      deliveryType\n      subtotal\n      tax\n      deliveryFee\n      discount\n      total\n      customerName\n      customerEmail\n      restaurantName\n      deliveryAddress\n      estimatedDeliveryTime\n      createdAt\n      items {\n        id\n        menuItemName\n        quantity\n        unitPrice\n        totalPrice\n      }\n    }\n  }\n}",
+                "variables": "{\n  \"createOrderDto\": {\n    \"customerId\": \"{{customer_id}}\",\n    \"customerName\": \"John Doe\",\n    \"customerEmail\": \"john@example.com\",\n    \"customerPhone\": \"+1234567890\",\n    \"restaurantId\": \"{{restaurant_id}}\",\n    \"restaurantName\": \"Test Restaurant\",\n    \"restaurantAddress\": \"123 Main St\",\n    \"deliveryType\": \"DELIVERY\",\n    \"deliveryAddress\": \"456 Customer Ave\",\n    \"deliveryInstructions\": \"Ring the bell\",\n    \"specialInstructions\": \"No onions please\",\n    \"items\": [\n      {\n        \"menuItemId\": \"{{menu_item_id}}\",\n        \"menuItemName\": \"Margherita Pizza\",\n        \"menuItemDescription\": \"Classic tomato and mozzarella\",\n        \"quantity\": 2,\n        \"unitPrice\": 12.99\n      },\n      {\n        \"menuItemId\": \"{{menu_item_id}}\",\n        \"menuItemName\": \"Caesar Salad\",\n        \"quantity\": 1,\n        \"unitPrice\": 8.50\n      }\n    ]\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Create Order (Pickup)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateOrder($createOrderDto: CreateOrderDto!) {\n  createOrder(createOrderDto: $createOrderDto) {\n    message\n    error { message code }\n    order {\n      id\n      orderNumber\n      status\n      deliveryType\n      total\n      estimatedDeliveryTime\n    }\n  }\n}",
+                "variables": "{\n  \"createOrderDto\": {\n    \"customerId\": \"{{customer_id}}\",\n    \"customerName\": \"Jane Smith\",\n    \"customerEmail\": \"jane@example.com\",\n    \"restaurantId\": \"{{restaurant_id}}\",\n    \"restaurantName\": \"Test Restaurant\",\n    \"restaurantAddress\": \"123 Main St\",\n    \"deliveryType\": \"PICKUP\",\n    \"items\": [\n      {\n        \"menuItemId\": \"{{menu_item_id}}\",\n        \"menuItemName\": \"Burger Combo\",\n        \"quantity\": 1,\n        \"unitPrice\": 15.00\n      }\n    ]\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Create Order (Dine In)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateOrder($createOrderDto: CreateOrderDto!) {\n  createOrder(createOrderDto: $createOrderDto) {\n    message\n    error { message code }\n    order {\n      id\n      orderNumber\n      status\n      deliveryType\n      total\n    }\n  }\n}",
+                "variables": "{\n  \"createOrderDto\": {\n    \"customerId\": \"{{customer_id}}\",\n    \"customerName\": \"Bob Wilson\",\n    \"customerEmail\": \"bob@example.com\",\n    \"restaurantId\": \"{{restaurant_id}}\",\n    \"restaurantName\": \"Test Restaurant\",\n    \"restaurantAddress\": \"123 Main St\",\n    \"deliveryType\": \"DINE_IN\",\n    \"items\": [\n      {\n        \"menuItemId\": \"{{menu_item_id}}\",\n        \"menuItemName\": \"Pasta Carbonara\",\n        \"quantity\": 2,\n        \"unitPrice\": 18.00\n      }\n    ]\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Get Order By ID",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetOrderById($orderId: String!) {\n  getOrderById(orderId: $orderId) {\n    id\n    orderNumber\n    status\n    paymentStatus\n    deliveryType\n    subtotal\n    tax\n    deliveryFee\n    discount\n    total\n    customerName\n    customerEmail\n    customerPhone\n    restaurantName\n    restaurantAddress\n    deliveryAddress\n    deliveryInstructions\n    specialInstructions\n    estimatedDeliveryTime\n    deliveredAt\n    createdAt\n    updatedAt\n    items {\n      id\n      menuItemName\n      menuItemDescription\n      quantity\n      unitPrice\n      totalPrice\n      specialRequests\n    }\n    statusHistory {\n      id\n      status\n      previousStatus\n      reason\n      changedBy\n      changedByRole\n      timestamp\n    }\n  }\n}",
+                "variables": "{\n  \"orderId\": \"{{order_id}}\"\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Get All Orders",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetOrders($filterDto: GetOrdersFilterDto) {\n  getOrders(filterDto: $filterDto) {\n    total\n    limit\n    skip\n    error { message code }\n    orders {\n      id\n      orderNumber\n      status\n      deliveryType\n      total\n      customerName\n      restaurantName\n      createdAt\n    }\n  }\n}",
+                "variables": "{\n  \"filterDto\": {\n    \"limit\": 20,\n    \"skip\": 0\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Get Orders - Filter by Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetOrders($filterDto: GetOrdersFilterDto) {\n  getOrders(filterDto: $filterDto) {\n    total\n    limit\n    skip\n    orders {\n      id\n      orderNumber\n      status\n      total\n      customerName\n      createdAt\n    }\n  }\n}",
+                "variables": "{\n  \"filterDto\": {\n    \"status\": \"PENDING\",\n    \"limit\": 20,\n    \"skip\": 0\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Get Customer Orders",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetCustomerOrders($customerId: String!, $limit: Int, $skip: Int) {\n  getCustomerOrders(customerId: $customerId, limit: $limit, skip: $skip) {\n    total\n    limit\n    skip\n    orders {\n      id\n      orderNumber\n      status\n      total\n      deliveryType\n      restaurantName\n      createdAt\n    }\n  }\n}",
+                "variables": "{\n  \"customerId\": \"{{customer_id}}\",\n  \"limit\": 20,\n  \"skip\": 0\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Get Restaurant Orders",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetRestaurantOrders($restaurantId: String!, $limit: Int, $skip: Int) {\n  getRestaurantOrders(restaurantId: $restaurantId, limit: $limit, skip: $skip) {\n    total\n    limit\n    skip\n    orders {\n      id\n      orderNumber\n      status\n      total\n      deliveryType\n      customerName\n      createdAt\n    }\n  }\n}",
+                "variables": "{\n  \"restaurantId\": \"{{restaurant_id}}\",\n  \"limit\": 20,\n  \"skip\": 0\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Get Active Orders",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetActiveOrders($restaurantId: String) {\n  getActiveOrders(restaurantId: $restaurantId) {\n    id\n    orderNumber\n    status\n    total\n    customerName\n    deliveryType\n    createdAt\n  }\n}",
+                "variables": "{\n  \"restaurantId\": \"{{restaurant_id}}\"\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Get Orders Ready For Pickup",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetOrdersReadyForPickup($restaurantId: String!) {\n  getOrdersReadyForPickup(restaurantId: $restaurantId) {\n    id\n    orderNumber\n    status\n    total\n    customerName\n    deliveryType\n    createdAt\n  }\n}",
+                "variables": "{\n  \"restaurantId\": \"{{restaurant_id}}\"\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Order Status Flow",
+      "description": "Status transitions: PENDING → CONFIRMED → PREPARING → READY → OUT_FOR_DELIVERY → DELIVERED",
+      "item": [
+        {
+          "name": "Confirm Order (PENDING → CONFIRMED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateOrderStatus($updateStatusDto: UpdateOrderStatusDto!) {\n  updateOrderStatus(updateStatusDto: $updateStatusDto) {\n    message\n    error { message code }\n    order {\n      id\n      orderNumber\n      status\n      updatedAt\n    }\n  }\n}",
+                "variables": "{\n  \"updateStatusDto\": {\n    \"orderId\": \"{{order_id}}\",\n    \"status\": \"CONFIRMED\",\n    \"reason\": \"Order confirmed by restaurant\",\n    \"changedBy\": \"{{restaurant_id}}\",\n    \"changedByRole\": \"RESTAURANT\"\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Start Preparing (CONFIRMED → PREPARING)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateOrderStatus($updateStatusDto: UpdateOrderStatusDto!) {\n  updateOrderStatus(updateStatusDto: $updateStatusDto) {\n    message\n    error { message code }\n    order {\n      id\n      orderNumber\n      status\n      updatedAt\n    }\n  }\n}",
+                "variables": "{\n  \"updateStatusDto\": {\n    \"orderId\": \"{{order_id}}\",\n    \"status\": \"PREPARING\",\n    \"reason\": \"Kitchen started preparing\",\n    \"changedBy\": \"{{restaurant_id}}\",\n    \"changedByRole\": \"RESTAURANT\"\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Mark Ready (PREPARING → READY)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateOrderStatus($updateStatusDto: UpdateOrderStatusDto!) {\n  updateOrderStatus(updateStatusDto: $updateStatusDto) {\n    message\n    error { message code }\n    order {\n      id\n      orderNumber\n      status\n      readyAt\n    }\n  }\n}",
+                "variables": "{\n  \"updateStatusDto\": {\n    \"orderId\": \"{{order_id}}\",\n    \"status\": \"READY\",\n    \"reason\": \"Order is ready for pickup/delivery\",\n    \"changedBy\": \"{{restaurant_id}}\",\n    \"changedByRole\": \"RESTAURANT\"\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Out For Delivery (READY → OUT_FOR_DELIVERY)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateOrderStatus($updateStatusDto: UpdateOrderStatusDto!) {\n  updateOrderStatus(updateStatusDto: $updateStatusDto) {\n    message\n    error { message code }\n    order {\n      id\n      orderNumber\n      status\n      pickedUpAt\n    }\n  }\n}",
+                "variables": "{\n  \"updateStatusDto\": {\n    \"orderId\": \"{{order_id}}\",\n    \"status\": \"OUT_FOR_DELIVERY\",\n    \"reason\": \"Driver picked up the order\",\n    \"changedBy\": \"{{restaurant_id}}\",\n    \"changedByRole\": \"RESTAURANT\"\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Mark Delivered (OUT_FOR_DELIVERY → DELIVERED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateOrderStatus($updateStatusDto: UpdateOrderStatusDto!) {\n  updateOrderStatus(updateStatusDto: $updateStatusDto) {\n    message\n    error { message code }\n    order {\n      id\n      orderNumber\n      status\n      deliveredAt\n      actualDeliveryTime\n    }\n  }\n}",
+                "variables": "{\n  \"updateStatusDto\": {\n    \"orderId\": \"{{order_id}}\",\n    \"status\": \"DELIVERED\",\n    \"reason\": \"Order delivered to customer\",\n    \"changedBy\": \"{{customer_id}}\",\n    \"changedByRole\": \"CUSTOMER\"\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Cancel Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CancelOrder($cancelOrderDto: CancelOrderDto!) {\n  cancelOrder(cancelOrderDto: $cancelOrderDto) {\n    message\n    error { message code }\n    order {\n      id\n      orderNumber\n      status\n      notes\n      updatedAt\n    }\n  }\n}",
+                "variables": "{\n  \"cancelOrderDto\": {\n    \"orderId\": \"{{order_id}}\",\n    \"reason\": \"Customer changed their mind\",\n    \"cancelledBy\": \"{{customer_id}}\"\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reviews",
+      "item": [
+        {
+          "name": "Create Order Review",
+          "description": "Order must be in DELIVERED status first",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "access-token", "value": "{{access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateOrderReview($reviewDto: CreateOrderReviewDto!) {\n  createOrderReview(reviewDto: $reviewDto) {\n    message\n    error { message code }\n    review {\n      id\n      orderId\n      rating\n      comment\n      foodQuality\n      deliverySpeed\n      customerService\n      isPublic\n      isVerified\n      createdAt\n    }\n  }\n}",
+                "variables": "{\n  \"reviewDto\": {\n    \"orderId\": \"{{order_id}}\",\n    \"rating\": 5,\n    \"comment\": \"Excellent food and fast delivery!\",\n    \"foodQuality\": 5,\n    \"deliverySpeed\": 4,\n    \"customerService\": 5\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        }
+      ]
+    }
+  ]
+}

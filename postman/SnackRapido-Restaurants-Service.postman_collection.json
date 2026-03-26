@@ -1,0 +1,432 @@
+{
+  "info": {
+    "name": "SnackRapido - Restaurants Service",
+    "description": "GraphQL API for the SnackRapido Restaurants microservice (port 4001).\n\nAuth flow:\n1. Register Restaurant → get activation_token\n2. Activate → get restaurant\n3. Login → get accessToken + refreshToken\n4. Use tokens in headers for protected routes\n\nProtected routes require:\n- accesstoken header\n- refreshtoken header",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4001/graphql" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "activationToken", "value": "" },
+    { "key": "restaurantId", "value": "" },
+    { "key": "menuId", "value": "" },
+    { "key": "categoryId", "value": "" },
+    { "key": "menuItemId", "value": "" },
+    { "key": "operatingHoursId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "description": "Registration, activation, login, logout",
+      "item": [
+        {
+          "name": "1. Register Restaurant",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const res = pm.response.json();",
+            "if (res.data?.registerRestaurant?.activation_token) {",
+            "  pm.collectionVariables.set('activationToken', res.data.registerRestaurant.activation_token);",
+            "  pm.test('Registration successful - activation_token saved', () => pm.expect(res.data.registerRestaurant.activation_token).to.be.a('string'));",
+            "} else { pm.test('Registration failed', () => pm.expect.fail(JSON.stringify(res.errors || res))); }"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "graphql", "graphql": {
+              "query": "mutation RegisterRestaurant($registerDto: RegisterDto!) {\n  registerRestaurant(registerDto: $registerDto) {\n    message\n    activation_token\n    error { message }\n  }\n}",
+              "variables": "{\n  \"registerDto\": {\n    \"name\": \"Pizza Palace\",\n    \"country\": \"Tunisia\",\n    \"city\": \"Tunis\",\n    \"address\": \"123 Habib Bourguiba Ave\",\n    \"email\": \"pizzapalace@example.com\",\n    \"phone_number\": 21612345678,\n    \"password\": \"Password123!\"\n  }\n}"
+            }},
+            "url": { "raw": "{{baseUrl}}", "host": ["{{baseUrl}}"] },
+            "description": "Register a new restaurant. Returns activation_token — check email/console for the 4-digit code."
+          }
+        },
+        {
+          "name": "2. Activate Restaurant",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const res = pm.response.json();",
+            "if (res.data?.activateRestaurant?.restaurant?.id) {",
+            "  pm.collectionVariables.set('restaurantId', res.data.activateRestaurant.restaurant.id);",
+            "  pm.test('Activation successful - restaurantId saved', () => pm.expect(res.data.activateRestaurant.restaurant.id).to.be.a('string'));",
+            "} else { pm.test('Activation failed', () => pm.expect.fail(JSON.stringify(res.errors || res))); }"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "graphql", "graphql": {
+              "query": "mutation ActivateRestaurant($activationDto: ActivationDto!) {\n  activateRestaurant(activationDto: $activationDto) {\n    restaurant {\n      id\n      name\n      email\n      city\n      country\n      address\n      createdAt\n    }\n    error { message }\n  }\n}",
+              "variables": "{\n  \"activationDto\": {\n    \"activationToken\": \"{{activationToken}}\",\n    \"activationCode\": \"PASTE_4_DIGIT_CODE_HERE\"\n  }\n}"
+            }},
+            "url": { "raw": "{{baseUrl}}", "host": ["{{baseUrl}}"] },
+            "description": "Activate the restaurant with the token (auto-saved) and the 4-digit code from email/console."
+          }
+        },
+        {
+          "name": "3. Login Restaurant",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const res = pm.response.json();",
+            "if (res.data?.LoginRestaurant?.accessToken) {",
+            "  pm.collectionVariables.set('accessToken', res.data.LoginRestaurant.accessToken);",
+            "  pm.collectionVariables.set('refreshToken', res.data.LoginRestaurant.refreshToken);",
+            "  if (res.data.LoginRestaurant.restaurant?.id) pm.collectionVariables.set('restaurantId', res.data.LoginRestaurant.restaurant.id);",
+            "  pm.test('Login successful - tokens saved', () => pm.expect(res.data.LoginRestaurant.accessToken).to.be.a('string'));",
+            "} else { pm.test('Login failed', () => pm.expect.fail(JSON.stringify(res.errors || res.data))); }"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "graphql", "graphql": {
+              "query": "mutation LoginRestaurant($loginDto: LoginDto!) {\n  LoginRestaurant(loginDto: $loginDto) {\n    restaurant {\n      id\n      name\n      email\n      city\n      country\n      address\n      menus { id name }\n      categories { id name }\n      menuItems { id name price }\n      operatingHours { id dayOfWeek openTime closeTime }\n      createdAt\n    }\n    accessToken\n    refreshToken\n    error { message }\n  }\n}",
+              "variables": "{\n  \"loginDto\": {\n    \"email\": \"pizzapalace@example.com\",\n    \"password\": \"Password123!\"\n  }\n}"
+            }},
+            "url": { "raw": "{{baseUrl}}", "host": ["{{baseUrl}}"] },
+            "description": "Login with email/password. Tokens are auto-saved to collection variables."
+          }
+        },
+        {
+          "name": "4. Get Logged In Restaurant (Protected)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
+            ],
+            "body": { "mode": "graphql", "graphql": {
+              "query": "query GetLoggedInRestaurant {\n  getLoggedInRestaurant {\n    restaurant {\n      id\n      name\n      email\n      city\n      country\n      address\n      phone_number\n      menus { id name }\n      categories { id name description }\n      menuItems { id name price available }\n      operatingHours { id dayOfWeek openTime closeTime isClosed }\n      createdAt\n      updatedAt\n    }\n    accessToken\n    refreshToken\n    error { message }\n  }\n}",
+              "variables": "{}"
+            }},
+            "url": { "raw": "{{baseUrl}}", "host": ["{{baseUrl}}"] },
+            "description": "Get the currently authenticated restaurant's full profile."
+          }
+        },
+        {
+          "name": "5. Logout Restaurant (Protected)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
+            ],
+            "body": { "mode": "graphql", "graphql": {
+              "query": "query LogOutRestaurant {\n  logOutRestaurant {\n    message\n  }\n}",
+              "variables": "{}"
+            }},
+            "url": { "raw": "{{baseUrl}}", "host": ["{{baseUrl}}"] },
+            "description": "Logout the current restaurant session."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Discovery",
+      "description": "Public queries — no auth required",
+      "item": [
+        {
+          "name": "Find Restaurants Near Location",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "graphql", "graphql": {
+              "query": "query FindRestaurantsNear($findRestaurantsNearDto: FindRestaurantsNearDto!) {\n  findRestaurantsNear(findRestaurantsNearDto: $findRestaurantsNearDto) {\n    restaurants {\n      id\n      name\n      city\n      address\n      menuItems { id name price }\n    }\n    error { message }\n  }\n}",
+              "variables": "{\n  \"findRestaurantsNearDto\": {\n    \"coordinates\": [10.1815, 36.8065],\n    \"maxDistance\": 5000\n  }\n}"
+            }},
+            "url": { "raw": "{{baseUrl}}", "host": ["{{baseUrl}}"] },
+            "description": "Find restaurants near a location. coordinates: [longitude, latitude]. maxDistance in meters."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Menu Management",
+      "description": "Create, update, delete menus — all protected",
+      "item": [
+        {
+          "name": "1. Create Menu",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const res = pm.response.json();",
+            "const menus = res.data?.createMenu?.restaurant?.menus;",
+            "if (menus?.length > 0) {",
+            "  pm.collectionVariables.set('menuId', menus[menus.length - 1].id);",
+            "  pm.test('Menu created - menuId saved', () => pm.expect(menus[menus.length - 1].id).to.be.a('string'));",
+            "} else { pm.test('Create menu failed', () => pm.expect.fail(JSON.stringify(res.errors || res))); }"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
+            ],
+            "body": { "mode": "graphql", "graphql": {
+              "query": "mutation CreateMenu($createMenuDto: CreateMenuDto!) {\n  createMenu(createMenuDto: $createMenuDto) {\n    message\n    restaurant {\n      id\n      menus { id name }\n    }\n    error { message }\n  }\n}",
+              "variables": "{\n  \"createMenuDto\": {\n    \"name\": \"Main Menu\"\n  }\n}"
+            }},
+            "url": { "raw": "{{baseUrl}}", "host": ["{{baseUrl}}"] },
+            "description": "Create a new menu for the authenticated restaurant. menuId is auto-saved."
+          }
+        },
+        {
+          "name": "2. Update Menu",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
+            ],
+            "body": { "mode": "graphql", "graphql": {
+              "query": "mutation UpdateMenu($updateMenuDto: UpdateMenuDto!) {\n  updateMenu(updateMenuDto: $updateMenuDto) {\n    message\n    restaurant {\n      id\n      menus { id name }\n    }\n    error { message }\n  }\n}",
+              "variables": "{\n  \"updateMenuDto\": {\n    \"id\": \"{{menuId}}\",\n    \"name\": \"Main Menu (Updated)\"\n  }\n}"
+            }},
+            "url": { "raw": "{{baseUrl}}", "host": ["{{baseUrl}}"] }
+          }
+        },
+        {
+          "name": "3. Delete Menu",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
+            ],
+            "body": { "mode": "graphql", "graphql": {
+              "query": "mutation DeleteMenu($deleteMenuDto: DeleteMenuDto!) {\n  deleteMenu(deleteMenuDto: $deleteMenuDto) {\n    message\n    restaurant {\n      id\n      menus { id name }\n    }\n    error { message }\n  }\n}",
+              "variables": "{\n  \"deleteMenuDto\": {\n    \"id\": \"{{menuId}}\"\n  }\n}"
+            }},
+            "url": { "raw": "{{baseUrl}}", "host": ["{{baseUrl}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Category Management",
+      "description": "Create, update, delete categories — all protected",
+      "item": [
+        {
+          "name": "1. Create Category",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const res = pm.response.json();",
+            "const cats = res.data?.createCategory?.restaurant?.categories;",
+            "if (cats?.length > 0) {",
+            "  pm.collectionVariables.set('categoryId', cats[cats.length - 1].id);",
+            "  pm.test('Category created - categoryId saved', () => pm.expect(cats[cats.length - 1].id).to.be.a('string'));",
+            "} else { pm.test('Create category failed', () => pm.expect.fail(JSON.stringify(res.errors || res))); }"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
+            ],
+            "body": { "mode": "graphql", "graphql": {
+              "query": "mutation CreateCategory($createCategoryDto: CreateCategoryDto!) {\n  createCategory(createCategoryDto: $createCategoryDto) {\n    message\n    restaurant {\n      id\n      categories { id name description }\n    }\n    error { message }\n  }\n}",
+              "variables": "{\n  \"createCategoryDto\": {\n    \"name\": \"Pizzas\",\n    \"description\": \"Our signature wood-fired pizzas\"\n  }\n}"
+            }},
+            "url": { "raw": "{{baseUrl}}", "host": ["{{baseUrl}}"] },
+            "description": "Create a category. categoryId is auto-saved for use in menu item creation."
+          }
+        },
+        {
+          "name": "2. Update Category",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
+            ],
+            "body": { "mode": "graphql", "graphql": {
+              "query": "mutation UpdateCategory($updateCategoryDto: UpdateCategoryDto!) {\n  updateCategory(updateCategoryDto: $updateCategoryDto) {\n    message\n    restaurant {\n      id\n      categories { id name description }\n    }\n    error { message }\n  }\n}",
+              "variables": "{\n  \"updateCategoryDto\": {\n    \"id\": \"{{categoryId}}\",\n    \"name\": \"Pizzas & Calzones\",\n    \"description\": \"Wood-fired pizzas and calzones\"\n  }\n}"
+            }},
+            "url": { "raw": "{{baseUrl}}", "host": ["{{baseUrl}}"] }
+          }
+        },
+        {
+          "name": "3. Delete Category",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
+            ],
+            "body": { "mode": "graphql", "graphql": {
+              "query": "mutation DeleteCategory($deleteCategoryDto: DeleteCategoryDto!) {\n  deleteCategory(deleteCategoryDto: $deleteCategoryDto) {\n    message\n    restaurant {\n      id\n      categories { id name }\n    }\n    error { message }\n  }\n}",
+              "variables": "{\n  \"deleteCategoryDto\": {\n    \"id\": \"{{categoryId}}\"\n  }\n}"
+            }},
+            "url": { "raw": "{{baseUrl}}", "host": ["{{baseUrl}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Menu Item Management",
+      "description": "Create, update, delete menu items — all protected",
+      "item": [
+        {
+          "name": "1. Create Menu Item",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const res = pm.response.json();",
+            "const items = res.data?.createMenuItem?.restaurant?.menuItems;",
+            "if (items?.length > 0) {",
+            "  pm.collectionVariables.set('menuItemId', items[items.length - 1].id);",
+            "  pm.test('Menu item created - menuItemId saved', () => pm.expect(items[items.length - 1].id).to.be.a('string'));",
+            "} else { pm.test('Create menu item failed', () => pm.expect.fail(JSON.stringify(res.errors || res))); }"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
+            ],
+            "body": { "mode": "graphql", "graphql": {
+              "query": "mutation CreateMenuItem($createMenuItemDto: CreateMenuItemDto!) {\n  createMenuItem(createMenuItemDto: $createMenuItemDto) {\n    message\n    restaurant {\n      id\n      menuItems {\n        id\n        name\n        description\n        price\n        available\n        categoryId\n      }\n    }\n    error { message }\n  }\n}",
+              "variables": "{\n  \"createMenuItemDto\": {\n    \"name\": \"Margherita Pizza\",\n    \"description\": \"Classic tomato sauce, mozzarella, fresh basil\",\n    \"price\": 12.99,\n    \"estimatedPrice\": 15.00,\n    \"categoryId\": \"{{categoryId}}\",\n    \"menuId\": \"{{menuId}}\",\n    \"available\": true,\n    \"images\": []\n  }\n}"
+            }},
+            "url": { "raw": "{{baseUrl}}", "host": ["{{baseUrl}}"] },
+            "description": "Create a menu item. Requires categoryId (auto-saved from Create Category). menuItemId is auto-saved."
+          }
+        },
+        {
+          "name": "2. Update Menu Item",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
+            ],
+            "body": { "mode": "graphql", "graphql": {
+              "query": "mutation UpdateMenuItem($updateMenuItemDto: UpdateMenuItemDto!) {\n  updateMenuItem(updateMenuItemDto: $updateMenuItemDto) {\n    message\n    restaurant {\n      id\n      menuItems { id name price available }\n    }\n    error { message }\n  }\n}",
+              "variables": "{\n  \"updateMenuItemDto\": {\n    \"id\": \"{{menuItemId}}\",\n    \"name\": \"Margherita Pizza (Large)\",\n    \"description\": \"Classic tomato sauce, mozzarella, fresh basil — large size\",\n    \"price\": 16.99,\n    \"available\": true\n  }\n}"
+            }},
+            "url": { "raw": "{{baseUrl}}", "host": ["{{baseUrl}}"] }
+          }
+        },
+        {
+          "name": "3. Delete Menu Item",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
+            ],
+            "body": { "mode": "graphql", "graphql": {
+              "query": "mutation DeleteMenuItem($deleteMenuItemDto: DeleteMenuItemDto!) {\n  deleteMenuItem(deleteMenuItemDto: $deleteMenuItemDto) {\n    message\n    restaurant {\n      id\n      menuItems { id name }\n    }\n    error { message }\n  }\n}",
+              "variables": "{\n  \"deleteMenuItemDto\": {\n    \"id\": \"{{menuItemId}}\"\n  }\n}"
+            }},
+            "url": { "raw": "{{baseUrl}}", "host": ["{{baseUrl}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Operating Hours",
+      "description": "Manage restaurant opening hours — all protected",
+      "item": [
+        {
+          "name": "1. Create Operating Hours",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const res = pm.response.json();",
+            "const hours = res.data?.createOperatingHours?.restaurant?.operatingHours;",
+            "if (hours?.length > 0) {",
+            "  pm.collectionVariables.set('operatingHoursId', hours[hours.length - 1].id);",
+            "  pm.test('Operating hours created', () => pm.expect(hours[hours.length - 1].id).to.be.a('string'));",
+            "} else { pm.test('Create operating hours failed', () => pm.expect.fail(JSON.stringify(res.errors || res))); }"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
+            ],
+            "body": { "mode": "graphql", "graphql": {
+              "query": "mutation CreateOperatingHours($createOperatingHoursDto: CreateOperatingHoursDto!) {\n  createOperatingHours(createOperatingHoursDto: $createOperatingHoursDto) {\n    message\n    restaurant {\n      id\n      operatingHours { id dayOfWeek openTime closeTime isClosed }\n    }\n    error { message }\n  }\n}",
+              "variables": "{\n  \"createOperatingHoursDto\": {\n    \"dayOfWeek\": \"Monday\",\n    \"openTime\": \"09:00\",\n    \"closeTime\": \"22:00\",\n    \"isClosed\": false\n  }\n}"
+            }},
+            "url": { "raw": "{{baseUrl}}", "host": ["{{baseUrl}}"] },
+            "description": "Set operating hours for a specific day. Run this for each day of the week."
+          }
+        },
+        {
+          "name": "2. Update Operating Hours",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
+            ],
+            "body": { "mode": "graphql", "graphql": {
+              "query": "mutation UpdateOperatingHours($updateOperatingHoursDto: UpdateOperatingHoursDto!) {\n  updateOperatingHours(updateOperatingHoursDto: $updateOperatingHoursDto) {\n    message\n    restaurant {\n      id\n      operatingHours { id dayOfWeek openTime closeTime isClosed }\n    }\n    error { message }\n  }\n}",
+              "variables": "{\n  \"updateOperatingHoursDto\": {\n    \"id\": \"{{operatingHoursId}}\",\n    \"dayOfWeek\": \"Monday\",\n    \"openTime\": \"10:00\",\n    \"closeTime\": \"23:00\",\n    \"isClosed\": false\n  }\n}"
+            }},
+            "url": { "raw": "{{baseUrl}}", "host": ["{{baseUrl}}"] }
+          }
+        },
+        {
+          "name": "3. Delete Operating Hours",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
+            ],
+            "body": { "mode": "graphql", "graphql": {
+              "query": "mutation DeleteOperatingHours($deleteOperatingHoursDto: DeleteOperatingHoursDto!) {\n  deleteOperatingHours(deleteOperatingHoursDto: $deleteOperatingHoursDto) {\n    message\n    restaurant {\n      id\n      operatingHours { id dayOfWeek openTime closeTime }\n    }\n    error { message }\n  }\n}",
+              "variables": "{\n  \"deleteOperatingHoursDto\": {\n    \"id\": \"{{operatingHoursId}}\"\n  }\n}"
+            }},
+            "url": { "raw": "{{baseUrl}}", "host": ["{{baseUrl}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Staff Management",
+      "description": "Add and remove staff members — all protected",
+      "item": [
+        {
+          "name": "1. Add Staff Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
+            ],
+            "body": { "mode": "graphql", "graphql": {
+              "query": "mutation AddStaffMember($addStaffMemberDto: AddStaffMemberDto!) {\n  addStaffMember(addStaffMemberDto: $addStaffMemberDto) {\n    message\n    restaurant {\n      id\n      name\n    }\n    error { message }\n  }\n}",
+              "variables": "{\n  \"addStaffMemberDto\": {\n    \"userId\": \"PASTE_USER_ID_FROM_USERS_SERVICE\",\n    \"role\": \"Staff\"\n  }\n}"
+            }},
+            "url": { "raw": "{{baseUrl}}", "host": ["{{baseUrl}}"] },
+            "description": "Add a user as a staff member. userId must be a valid user ID from the Users service."
+          }
+        },
+        {
+          "name": "2. Remove Staff Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
+            ],
+            "body": { "mode": "graphql", "graphql": {
+              "query": "mutation RemoveStaffMember($removeStaffMemberDto: RemoveStaffMemberDto!) {\n  removeStaffMember(removeStaffMemberDto: $removeStaffMemberDto) {\n    message\n    restaurant {\n      id\n      name\n    }\n    error { message }\n  }\n}",
+              "variables": "{\n  \"removeStaffMemberDto\": {\n    \"userId\": \"PASTE_USER_ID_FROM_USERS_SERVICE\"\n  }\n}"
+            }},
+            "url": { "raw": "{{baseUrl}}", "host": ["{{baseUrl}}"] }
+          }
+        }
+      ]
+    }
+  ]
+}
