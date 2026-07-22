@@ -97,21 +97,6 @@ export class OperatingHours {
 }
 
 @ObjectType()
-export class User {
-  @Field()
-  id: string;
-
-  @Field()
-  name: string;
-
-  @Field()
-  email: string;
-
-  @Field()
-  role: string;
-}
-
-@ObjectType()
 @Directive('@key(fields: "id")')
 export class Restaurant {
   @Field()
@@ -140,9 +125,6 @@ export class Restaurant {
 
   @Field({ nullable: true })
   ownerId?: string;
-
-  @Field(() => User, { nullable: true })
-  owner?: User;
 
   @Field(() => [Menu])
   menus: Menu[];

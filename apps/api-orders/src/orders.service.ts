@@ -57,11 +57,21 @@ export class OrdersService {
         throw new BadRequestException(`Invalid restaurant: ${restaurantValidation.error}`);
       }
 
-      // 3. Validate menu items
-      const menuItemsValidation = {
-        isValid: true,
-        validItems: createOrderDto.items,
-      };
+      // 3. Validate menu items exist and are available via restaurants service
+      const menuItemsValidation = await this.rabbitMQService.sendAndWait(
+        'menu.validateItems',
+        {
+          restaurantId: createOrderDto.restaurantId,
+          items: createOrderDto.items.map(item => ({
+            menuItemId: item.menuItemId,
+            quantity: item.quantity,
+          })),
+        }
+      );
+
+      if (!menuItemsValidation.isValid) {
+        throw new BadRequestException(`Invalid menu items: ${menuItemsValidation.error}`);
+      }
 
       // 4. Validate order business rules
       const validation = await this.validateOrderItems(createOrderDto.items);
@@ -150,7 +160,7 @@ export class OrdersService {
         message: 'Order placed successfully',
         order: orderWithHistory,
       };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`❌ Failed to create order:`, error.message || 'Unknown error');
       this.logger.error(`Error details:`, JSON.stringify(error, null, 2));
       this.logger.error(`Error type:`, error.constructor.name);
@@ -249,7 +259,7 @@ export class OrdersService {
         message: 'Order status updated successfully',
         order: orderWithHistory,
       };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`❌ Failed to update order status:`, error.message);
       throw error;
     }
@@ -276,12 +286,17 @@ export class OrdersService {
         throw new BadRequestException(`Cannot cancel order with status: ${existingOrder.status}`);
       }
 
-      // Determine changedByRole for cancellation
-      let changedByRole = 'CUSTOMER'; // Default for cancellations
+      // Verify the canceller is authorized (customer who placed the order or the restaurant)
+      let changedByRole = 'CUSTOMER';
       if (cancelOrderDto.cancelledBy) {
-        // Validate cancelledBy ID if provided
-        // For cancellation, it's usually the customer, but could be restaurant
-        await this.validateChangedBy(cancelOrderDto.cancelledBy, changedByRole);
+        const isCustomer = cancelOrderDto.cancelledBy === existingOrder.customerId;
+        const isRestaurant = cancelOrderDto.cancelledBy === existingOrder.restaurantId;
+        
+        if (!isCustomer && !isRestaurant) {
+          throw new ForbiddenException('You are not authorized to cancel this order');
+        }
+        
+        changedByRole = isRestaurant ? 'RESTAURANT' : 'CUSTOMER';
       }
 
       const previousStatus = existingOrder.status;
@@ -331,7 +346,7 @@ export class OrdersService {
         message: 'Order cancelled successfully',
         order: orderWithHistory,
       };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`❌ Failed to cancel order:`, error.message);
       throw error;
     }
@@ -371,7 +386,7 @@ export class OrdersService {
         limit,
         skip,
       };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`❌ Failed to get orders:`, error.message);
       throw error;
     }
@@ -421,7 +436,7 @@ export class OrdersService {
       this.logger.log(`💾 Order cached: ${orderId}`);
 
       return orderWithHistory;
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`❌ Failed to get order:`, error.message);
       throw error;
     }
@@ -507,7 +522,7 @@ export class OrdersService {
         message: 'Review created successfully',
         review,
       };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`❌ Failed to create review:`, error.message);
       throw error;
     }
@@ -675,7 +690,7 @@ export class OrdersService {
       this.logger.log(`📤 Event data prepared for ${eventType}:`, JSON.stringify(eventData, null, 2));
       await this.rabbitMQService.emitEvent(eventType, eventData);
       this.logger.log(`✅ Event ${eventType} published successfully`);
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`❌ Failed to publish event ${eventType}:`, error.message);
       this.logger.error(`❌ Error stack:`, error.stack);
     }
@@ -727,7 +742,7 @@ export class OrdersService {
       } else {
         this.logger.warn(`⚠️ Unknown role: ${role} - validation skipped`);
       }
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof BadRequestException) {
         throw error;
       }

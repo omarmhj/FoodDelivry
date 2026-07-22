@@ -8,6 +8,7 @@ import { GqlExecutionContext } from '@nestjs/graphql';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RedisService } from '../../../../libs/shared/src/redis.service';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -15,6 +16,7 @@ export class AuthGuard implements CanActivate {
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly redisService: RedisService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -28,8 +30,13 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException('Please login to access this resource!');
     }
 
+    // Check if token is blacklisted (logged out)
+    const isBlacklisted = await this.redisService.exists(`bl:${accessToken}`);
+    if (isBlacklisted) {
+      throw new UnauthorizedException('Token has been revoked. Please login again.');
+    }
+
     try {
-      // Verify signature AND expiration properly
       const decoded = this.jwtService.verify(accessToken, {
         secret: this.config.get<string>('ACCESS_TOKEN_SECRET'),
       });
@@ -39,7 +46,6 @@ export class AuthGuard implements CanActivate {
       req.refreshtoken = refreshToken;
       return true;
     } catch (error) {
-      // If access token expired, try refreshing
       if (error?.name === 'TokenExpiredError') {
         await this.updateAccessToken(req);
         return true;
@@ -52,26 +58,26 @@ export class AuthGuard implements CanActivate {
     try {
       const refreshTokenData = req.headers.refreshtoken as string;
 
+      // Check if refresh token is also blacklisted
+      const isBlacklisted = await this.redisService.exists(`bl:${refreshTokenData}`);
+      if (isBlacklisted) {
+        throw new UnauthorizedException('Session revoked. Please login again.');
+      }
+
       const decoded = this.jwtService.verify(refreshTokenData, {
         secret: this.config.get<string>('REFRESH_TOKEN_SECRET'),
       });
 
-      const expirationTime = decoded.exp * 1000;
-
-      if (expirationTime < Date.now()) {
-        throw new UnauthorizedException(
-          'Please login to access this resource!',
-        );
-      }
-
       const restaurant = await this.prisma.restaurant.findUnique({
-        where: {
-          id: decoded.id,
-        },
+        where: { id: decoded.id },
       });
 
+      if (!restaurant) {
+        throw new UnauthorizedException('Restaurant not found!');
+      }
+
       const accessToken = this.jwtService.sign(
-        { id: restaurant.id },
+        { id: restaurant.id, email: restaurant.email },
         {
           secret: this.config.get<string>('ACCESS_TOKEN_SECRET'),
           expiresIn: '15m',
@@ -88,9 +94,9 @@ export class AuthGuard implements CanActivate {
 
       req.accesstoken = accessToken;
       req.refreshtoken = refreshToken;
-      req.restaurant = restaurant;
+      req.restaurant = { id: restaurant.id, email: restaurant.email };
     } catch (error) {
-      throw new UnauthorizedException(error.message);
+      throw new UnauthorizedException('Session expired. Please login again!');
     }
   }
 }

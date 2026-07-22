@@ -7,7 +7,6 @@ async function main() {
   console.log('🌱 Seeding restaurants database...');
 
   // Clear existing data (order matters due to relations)
-  await prisma.reviews.deleteMany();
   await prisma.images.deleteMany();
   await prisma.menuItem.deleteMany();
   await prisma.menu.deleteMany();

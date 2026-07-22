@@ -5,6 +5,7 @@ import {
   ForgotPasswordResponse,
   LoginResponse,
   LogoutResposne,
+  RefreshTokenResponse,
   RegisterResponse,
   ResetPasswordResponse,
 } from './types/user.types';
@@ -96,5 +97,12 @@ export class UsersResolver {
       throw new BadRequestException(result.error || 'User not found');
     }
     return result.user;
+  }
+
+  @Mutation(() => RefreshTokenResponse)
+  async refreshAccessToken(
+    @Args('refreshToken') refreshToken: string,
+  ): Promise<RefreshTokenResponse> {
+    return await this.userService.refreshAccessToken(refreshToken);
   }
 }

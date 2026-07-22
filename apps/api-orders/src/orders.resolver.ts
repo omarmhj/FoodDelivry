@@ -1,4 +1,4 @@
-import { Resolver, Mutation, Query, Args, Context } from '@nestjs/graphql';
+import { Resolver, Mutation, Query, Args, Context, Int } from '@nestjs/graphql';
 import { UseGuards, Logger, ForbiddenException } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import {
@@ -220,8 +220,8 @@ export class OrdersResolver {
   @UseGuards(AuthGuard)
   async getCustomerOrders(
     @Args('customerId') customerId: string,
-    @Args('limit', { nullable: true }) limit?: number,
-    @Args('skip', { nullable: true }) skip?: number,
+    @Args('limit', { nullable: true, type: () => Int }) limit?: number,
+    @Args('skip', { nullable: true, type: () => Int }) skip?: number,
     @Context() context?: Record<string, unknown>,
   ): Promise<GetOrdersResponse> {
     try {
@@ -260,8 +260,8 @@ export class OrdersResolver {
   @UseGuards(AuthGuard)
   async getRestaurantOrders(
     @Args('restaurantId') restaurantId: string,
-    @Args('limit', { nullable: true }) limit?: number,
-    @Args('skip', { nullable: true }) skip?: number,
+    @Args('limit', { nullable: true, type: () => Int }) limit?: number,
+    @Args('skip', { nullable: true, type: () => Int }) skip?: number,
     @Context() context?: Record<string, unknown>,
   ): Promise<GetOrdersResponse> {
     try {

@@ -4,9 +4,30 @@
     "description": "GraphQL API for the Orders Service (port 4002). Requires api-users and api-restaurants running. All mutations/queries require a valid access token.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "exec": [
+          "const newAccessToken = pm.response.headers.get('accesstoken');",
+          "const newRefreshToken = pm.response.headers.get('refreshtoken');",
+          "if (newAccessToken) {",
+          "  pm.collectionVariables.set('accessToken', newAccessToken);",
+          "  console.log('accessToken auto-refreshed');",
+          "}",
+          "if (newRefreshToken) {",
+          "  pm.collectionVariables.set('refreshToken', newRefreshToken);",
+          "  console.log('refreshToken auto-refreshed');",
+          "}"
+        ],
+        "type": "text/javascript"
+      }
+    }
+  ],
   "variable": [
     { "key": "base_url", "value": "http://localhost:4002/graphql" },
-    { "key": "access_token", "value": "" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
     { "key": "order_id", "value": "" },
     { "key": "customer_id", "value": "" },
     { "key": "restaurant_id", "value": "" },
@@ -38,7 +59,8 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "access-token", "value": "{{access_token}}" }
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
             ],
             "body": {
               "mode": "graphql",
@@ -56,7 +78,8 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "access-token", "value": "{{access_token}}" }
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
             ],
             "body": {
               "mode": "graphql",
@@ -74,7 +97,8 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "access-token", "value": "{{access_token}}" }
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
             ],
             "body": {
               "mode": "graphql",
@@ -92,7 +116,8 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "access-token", "value": "{{access_token}}" }
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
             ],
             "body": {
               "mode": "graphql",
@@ -110,7 +135,8 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "access-token", "value": "{{access_token}}" }
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
             ],
             "body": {
               "mode": "graphql",
@@ -128,7 +154,8 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "access-token", "value": "{{access_token}}" }
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
             ],
             "body": {
               "mode": "graphql",
@@ -146,7 +173,8 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "access-token", "value": "{{access_token}}" }
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
             ],
             "body": {
               "mode": "graphql",
@@ -164,7 +192,8 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "access-token", "value": "{{access_token}}" }
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
             ],
             "body": {
               "mode": "graphql",
@@ -182,7 +211,8 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "access-token", "value": "{{access_token}}" }
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
             ],
             "body": {
               "mode": "graphql",
@@ -200,7 +230,8 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "access-token", "value": "{{access_token}}" }
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
             ],
             "body": {
               "mode": "graphql",
@@ -224,7 +255,8 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "access-token", "value": "{{access_token}}" }
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
             ],
             "body": {
               "mode": "graphql",
@@ -242,7 +274,8 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "access-token", "value": "{{access_token}}" }
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
             ],
             "body": {
               "mode": "graphql",
@@ -260,7 +293,8 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "access-token", "value": "{{access_token}}" }
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
             ],
             "body": {
               "mode": "graphql",
@@ -278,7 +312,8 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "access-token", "value": "{{access_token}}" }
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
             ],
             "body": {
               "mode": "graphql",
@@ -296,7 +331,8 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "access-token", "value": "{{access_token}}" }
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
             ],
             "body": {
               "mode": "graphql",
@@ -314,7 +350,8 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "access-token", "value": "{{access_token}}" }
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
             ],
             "body": {
               "mode": "graphql",
@@ -338,7 +375,8 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "access-token", "value": "{{access_token}}" }
+              { "key": "accesstoken", "value": "{{accessToken}}" },
+              { "key": "refreshtoken", "value": "{{refreshToken}}" }
             ],
             "body": {
               "mode": "graphql",

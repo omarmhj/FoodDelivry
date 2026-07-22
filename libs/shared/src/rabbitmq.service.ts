@@ -1,9 +1,11 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, OnModuleInit, Logger } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { Observable, timeout } from 'rxjs';
+import { Observable, timeout, lastValueFrom } from 'rxjs';
 
 @Injectable()
-export class RabbitMQService {
+export class RabbitMQService implements OnModuleInit {
+  private readonly logger = new Logger(RabbitMQService.name);
+
   constructor(
     @Inject('RABBITMQ_SERVICE')
     private readonly client: ClientProxy,
@@ -12,6 +14,14 @@ export class RabbitMQService {
     @Inject('ANALYTICS_SERVICE')
     private readonly analyticsClient: ClientProxy,
   ) {}
+
+  async onModuleInit() {
+    // Eagerly connect all client proxies so emit() works immediately
+    await this.client.connect();
+    await this.notificationsClient.connect();
+    await this.analyticsClient.connect();
+    this.logger.log('🐰 RabbitMQ clients connected (main, notifications, analytics)');
+  }
 
   /**
    * Send a message to RabbitMQ queue
@@ -25,14 +35,19 @@ export class RabbitMQService {
    */
   emitEvent<T = any>(pattern: string, data: T): void {
     try {
-      // Emit to notifications queue
+      // Emit to notifications queue — subscribe to trigger the publish
       if (this.notificationsClient) {
-        this.notificationsClient.emit(pattern, data);
+        lastValueFrom(this.notificationsClient.emit(pattern, data)).catch((err) =>
+          this.logger.error(`❌ Failed to emit "${pattern}" to notifications: ${err.message}`),
+        );
       }
-      // Emit to analytics queue
+      // Emit to analytics queue — subscribe to trigger the publish
       if (this.analyticsClient) {
-        this.analyticsClient.emit(pattern, data);
+        lastValueFrom(this.analyticsClient.emit(pattern, data)).catch((err) =>
+          this.logger.error(`❌ Failed to emit "${pattern}" to analytics: ${err.message}`),
+        );
       }
+      this.logger.log(`📤 Emitted "${pattern}" to notifications_queue + analytics_queue`);
     } catch (error) {
       console.error(`❌ RabbitMQ: Failed to emit event "${pattern}":`, error.message);
     }

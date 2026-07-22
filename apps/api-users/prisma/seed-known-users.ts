@@ -1,7 +1,6 @@
 /**
  * Creates 3 known test users — one per available role in the users service.
- * Note: The users DB only has Admin and User roles.
- *       Owner/Staff roles exist only in the restaurants DB.
+ * Available roles: Admin, User, Restaurant_Owner, Restaurant_Staff
  *
  * Does NOT wipe existing users — safe to run anytime.
  *
@@ -78,8 +77,6 @@ async function main() {
     console.log(`│ ${u.email.padEnd(27)} │ ${u.password.padEnd(10)} │ ${u.role.padEnd(5)} │`);
   }
   console.log('└─────────────────────────────┴────────────┴───────┘');
-  console.log('\n⚠️  Note: Owner/Staff roles only exist in the restaurants DB.');
-  console.log('   Use the restaurants service to register/login as a restaurant owner.');
 }
 
 main()

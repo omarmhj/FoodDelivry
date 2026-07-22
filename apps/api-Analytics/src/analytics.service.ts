@@ -57,6 +57,9 @@ export class AnalyticsService {
       // Update daily analytics
       await this.updateDailyAnalytics(data.restaurantId, orderDate, data.total);
 
+      // Track order volume metric
+      await this.trackMetric(data.restaurantId, AnalyticsType.ORDER_VOLUME, 1, orderDate);
+
       // Invalidate cached analytics
       await this.invalidateAnalyticsCache(data.restaurantId);
 
@@ -64,6 +67,200 @@ export class AnalyticsService {
     } catch (error) {
       this.logger.error(`❌ Failed to process order analytics:`, error.message);
       throw error;
+    }
+  }
+
+  /**
+   * Handle order.status.updated event
+   */
+  async handleOrderStatusUpdated(data: any) {
+    this.logger.log(`📊 Processing order.status.updated event: ${data.orderNumber}`);
+
+    try {
+      const eventDate = new Date(data.timestamp || Date.now());
+
+      // Track status transition metrics
+      await this.trackMetric(
+        data.restaurantId,
+        AnalyticsType.ORDER_VOLUME,
+        0, // No new order, just status change
+        eventDate,
+        {
+          orderId: data.orderId,
+          orderNumber: data.orderNumber,
+          previousStatus: data.previousStatus,
+          newStatus: data.status,
+          transitionType: `${data.previousStatus}_TO_${data.status}`,
+        },
+      );
+
+      // Track delivery completion
+      if (data.status === 'DELIVERED') {
+        this.logger.log(`📊 Order delivered: ${data.orderNumber}`);
+        await this.trackMetric(
+          data.restaurantId,
+          AnalyticsType.CUSTOMER_TRAFFIC,
+          1,
+          eventDate,
+          { type: 'completed_delivery', orderId: data.orderId },
+        );
+      }
+
+      // Track peak hours when order is confirmed (actual kitchen activity)
+      if (data.status === 'CONFIRMED' || data.status === 'PREPARING') {
+        const hour = eventDate.getHours();
+        await this.trackMetric(
+          data.restaurantId,
+          AnalyticsType.PEAK_HOURS,
+          1,
+          eventDate,
+          { hour, status: data.status },
+        );
+      }
+
+      this.logger.log(`✅ Status update analytics recorded for: ${data.orderNumber}`);
+    } catch (error) {
+      this.logger.error(`❌ Failed to process status update analytics:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle order.cancelled event
+   */
+  async handleOrderCancelled(data: any) {
+    this.logger.log(`📊 Processing order.cancelled event: ${data.orderNumber}`);
+
+    try {
+      const eventDate = new Date(data.timestamp || Date.now());
+
+      // Track cancellation metric
+      await this.trackMetric(
+        data.restaurantId,
+        AnalyticsType.ORDER_VOLUME,
+        -1, // Negative to indicate cancellation
+        eventDate,
+        {
+          orderId: data.orderId,
+          orderNumber: data.orderNumber,
+          previousStatus: data.previousStatus,
+          cancellationType: 'customer_cancelled',
+        },
+      );
+
+      // Update daily report to reflect cancellation
+      await this.updateDailyAnalyticsForCancellation(data.restaurantId, eventDate, data.total || 0);
+
+      // Invalidate cache
+      await this.invalidateAnalyticsCache(data.restaurantId);
+
+      this.logger.log(`✅ Cancellation analytics recorded for: ${data.orderNumber}`);
+    } catch (error) {
+      this.logger.error(`❌ Failed to process cancellation analytics:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle order.reviewed event
+   */
+  async handleOrderReviewed(data: any) {
+    this.logger.log(`📊 Processing order.reviewed event for order: ${data.orderId}`);
+
+    try {
+      const eventDate = new Date(data.timestamp || Date.now());
+
+      // Track review metric
+      await this.trackMetric(
+        data.restaurantId,
+        AnalyticsType.CUSTOMER_RETENTION,
+        data.rating || 0,
+        eventDate,
+        {
+          orderId: data.orderId,
+          reviewId: data.reviewId,
+          rating: data.rating,
+          comment: data.comment,
+          foodQuality: data.foodQuality,
+          deliverySpeed: data.deliverySpeed,
+          customerService: data.customerService,
+        },
+      );
+
+      // Invalidate cache
+      if (data.restaurantId) {
+        await this.invalidateAnalyticsCache(data.restaurantId);
+      }
+
+      this.logger.log(`✅ Review analytics recorded for order: ${data.orderId}`);
+    } catch (error) {
+      this.logger.error(`❌ Failed to process review analytics:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Track a metric in the Analytics collection
+   */
+  private async trackMetric(
+    restaurantId: string,
+    metricType: AnalyticsType,
+    value: number,
+    date: Date,
+    metadata?: Record<string, any>,
+  ) {
+    try {
+      await this.prisma.analytics.create({
+        data: {
+          restaurantId,
+          metricType,
+          value,
+          date,
+          metadata,
+        },
+      });
+    } catch (error) {
+      this.logger.error(`❌ Failed to track metric ${metricType}:`, error.message);
+    }
+  }
+
+  /**
+   * Update daily analytics for cancellation
+   */
+  private async updateDailyAnalyticsForCancellation(
+    restaurantId: string,
+    date: Date,
+    cancelledAmount: number,
+  ) {
+    const dateKey = new Date(date);
+    dateKey.setHours(0, 0, 0, 0);
+
+    try {
+      const existingReport = await this.prisma.dailyReport.findUnique({
+        where: {
+          restaurantId_date: {
+            restaurantId: restaurantId || 'global',
+            date: dateKey,
+          },
+        },
+      });
+
+      if (existingReport && existingReport.totalOrders > 0) {
+        const newTotalOrders = Math.max(0, existingReport.totalOrders - 1);
+        const newTotalRevenue = Math.max(0, existingReport.totalRevenue - cancelledAmount);
+        const newAvgOrderValue = newTotalOrders > 0 ? newTotalRevenue / newTotalOrders : 0;
+
+        await this.prisma.dailyReport.update({
+          where: { id: existingReport.id },
+          data: {
+            totalOrders: newTotalOrders,
+            totalRevenue: newTotalRevenue,
+            averageOrderValue: newAvgOrderValue,
+          },
+        });
+      }
+    } catch (error) {
+      this.logger.error(`❌ Failed to update daily analytics for cancellation:`, error.message);
     }
   }
 

@@ -16,6 +16,8 @@ import { CloudinaryService } from "./cloudinary/cloudinary.service";
 import { CloudinaryModule } from "./cloudinary/cloudinary.module";
 import { SharedModule } from "../../../libs/shared/src/shared.module";
 import { RedisModule } from "../../../libs/shared/src/redis.module";
+import { RedisService } from "../../../libs/shared/src/redis.service";
+import { AuthGuard } from "./guards/auth.guard";
 
 @Module({
   imports: [
@@ -43,6 +45,8 @@ import { RedisModule } from "../../../libs/shared/src/redis.module";
     RestaurantResolver,
     MenuItemService,
     CloudinaryService,
+    RedisService,
+    AuthGuard,
   ],
 })
 export class restaurantModule {}

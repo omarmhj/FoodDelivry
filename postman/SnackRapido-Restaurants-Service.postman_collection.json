@@ -404,7 +404,7 @@
             ],
             "body": { "mode": "graphql", "graphql": {
               "query": "mutation AddStaffMember($addStaffMemberDto: AddStaffMemberDto!) {\n  addStaffMember(addStaffMemberDto: $addStaffMemberDto) {\n    message\n    restaurant {\n      id\n      name\n    }\n    error { message }\n  }\n}",
-              "variables": "{\n  \"addStaffMemberDto\": {\n    \"userId\": \"PASTE_USER_ID_FROM_USERS_SERVICE\",\n    \"role\": \"Staff\"\n  }\n}"
+              "variables": "{\n  \"addStaffMemberDto\": {\n    \"userId\": \"PASTE_USER_ID_FROM_USERS_SERVICE\",\n    \"role\": \"Restaurant_Staff\"\n  }\n}"
             }},
             "url": { "raw": "{{baseUrl}}", "host": ["{{baseUrl}}"] },
             "description": "Add a user as a staff member. userId must be a valid user ID from the Users service."

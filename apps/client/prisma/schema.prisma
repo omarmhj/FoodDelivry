@@ -10,6 +10,8 @@ datasource db {
 enum Role {
   Admin
   User
+  Restaurant_Owner
+  Restaurant_Staff
 }
 
 model Avatars {

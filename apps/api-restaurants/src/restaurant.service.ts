@@ -87,10 +87,9 @@ export class RestaurantService {
     }
 
     if (ownerId) {
-      const owner = await this.prisma.user.findUnique({
-        where: { id: ownerId },
-      });
-      if (!owner || owner.role !== 'Owner') {
+      // Validate owner via RabbitMQ (users service is the source of truth)
+      const validation = await this.rabbitMQService.sendAndWait('user.validate', { userId: ownerId });
+      if (!validation.isValid || validation.user?.role !== 'Restaurant_Owner') {
         throw new BadRequestException('Invalid or non-owner user ID');
       }
     }
@@ -187,7 +186,6 @@ export class RestaurantService {
           },
         },
         operatingHours: true,
-        owner: true,
       },
     });
 
@@ -252,7 +250,6 @@ export class RestaurantService {
             },
           },
           operatingHours: true,
-          owner: true,
         },
       });
 
@@ -271,9 +268,9 @@ export class RestaurantService {
       return tokenSender.sendToken(restaurant);
     } else {
       return {
-        restaurant: null,
-        accessToken: null,
-        refreshToken: null,
+        restaurant: undefined,
+        accessToken: undefined,
+        refreshToken: undefined,
         error: {
           message: 'Invalid email or password',
         },
@@ -305,7 +302,6 @@ export class RestaurantService {
           },
         },
         operatingHours: true,
-        owner: true,
       },
     });
 
@@ -325,9 +321,32 @@ export class RestaurantService {
       throw new BadRequestException('Restaurant not authenticated');
     }
 
-    req.restaurant = null;
-    req.refreshtoken = null;
-    req.accesstoken = null;
+    const accessToken = req.accesstoken;
+    const refreshToken = req.refreshtoken;
+
+    // Blacklist both tokens in Redis until they expire
+    if (accessToken) {
+      try {
+        const decoded = this.jwtService.decode(accessToken) as any;
+        if (decoded?.exp) {
+          const ttl = decoded.exp - Math.floor(Date.now() / 1000);
+          if (ttl > 0) await this.redisService.set(`bl:${accessToken}`, '1', ttl);
+        }
+      } catch (e) { /* already invalid */ }
+    }
+    if (refreshToken) {
+      try {
+        const decoded = this.jwtService.decode(refreshToken) as any;
+        if (decoded?.exp) {
+          const ttl = decoded.exp - Math.floor(Date.now() / 1000);
+          if (ttl > 0) await this.redisService.set(`bl:${refreshToken}`, '1', ttl);
+        }
+      } catch (e) { /* already invalid */ }
+    }
+
+    req.restaurant = undefined;
+    req.refreshtoken = undefined;
+    req.accesstoken = undefined;
     return { message: 'Logged out successfully!' };
   }
 
@@ -338,37 +357,40 @@ export class RestaurantService {
       throw new BadRequestException('Coordinates must be [longitude, latitude]');
     }
 
-     const rawRestaurants = await this.prisma.restaurant.findRaw({
-      filter: {
-        coordinates: {
-          $near: {
-            $geometry: { type: 'Point', coordinates },
-            $maxDistance: maxDistance,
+    // Use aggregateRaw with $geoNear pipeline — requires 2dsphere index on coordinates
+    const rawRestaurants = await this.prisma.restaurant.aggregateRaw({
+      pipeline: [
+        {
+          $geoNear: {
+            near: { type: 'Point', coordinates },
+            distanceField: 'distance',
+            maxDistance: maxDistance,
+            spherical: true,
           },
         },
-      },
-    });
+      ],
+    }) as unknown as any[]; // aggregateRaw returns JsonObject but we know it's an array at runtime
 
     if (!Array.isArray(rawRestaurants)) {
       throw new BadRequestException('Unexpected response format from database');
     }
 
-    // Map raw results to Restaurant type
+    // Map raw results to Restaurant type — aggregateRaw returns _id as { $oid: "..." }
     const restaurants = await Promise.all(
-      rawRestaurants.map(async (raw) => {
+      rawRestaurants.map(async (raw: any) => {
+        const id = raw._id?.$oid ?? raw._id?.toString();
         const restaurant = await this.prisma.restaurant.findUnique({
-          where: { id: raw._id.toString() },
-                include: {
-        menus: true,
-        categories: true,
-        menuItems: {
-      include: {
-        images: true,
-      },
-    },
-        operatingHours: true,
-        owner: true,
-      },
+          where: { id },
+          include: {
+            menus: true,
+            categories: true,
+            menuItems: {
+              include: {
+                images: true,
+              },
+            },
+            operatingHours: true,
+          },
         });
         return restaurant;
       }),
@@ -415,7 +437,6 @@ export class RestaurantService {
           },
         },
         operatingHours: true,
-        owner: true,
       },
     });
 
@@ -459,7 +480,6 @@ export class RestaurantService {
           },
         },
         operatingHours: true,
-        owner: true,
       },
     });
 
@@ -521,7 +541,6 @@ export class RestaurantService {
           },
         },
         operatingHours: true,
-        owner: true,
       },
     });
 
@@ -562,7 +581,6 @@ export class RestaurantService {
           },
         },
         operatingHours: true,
-        owner: true,
       },
     }); 
 
@@ -606,7 +624,6 @@ export class RestaurantService {
           },
         },
         operatingHours: true,
-        owner: true,
       },
     });
 
@@ -658,7 +675,6 @@ export class RestaurantService {
           },
         },
         operatingHours: true,
-        owner: true,
       },
     });
 
@@ -731,7 +747,6 @@ export class RestaurantService {
           },
         },
         operatingHours: true,
-        owner: true,
       },
     });
 
@@ -811,7 +826,6 @@ export class RestaurantService {
           },
         },
         operatingHours: true,
-        owner: true,
       },
     });
 
@@ -860,7 +874,6 @@ export class RestaurantService {
           },
         },
         operatingHours: true,
-        owner: true,
       },
     });
 
@@ -903,7 +916,6 @@ export class RestaurantService {
           },
         },
         operatingHours: true,
-        owner: true,
       },
     });
 
@@ -952,7 +964,6 @@ export class RestaurantService {
           },
         },
         operatingHours: true,
-        owner: true,
       },
     });
 
@@ -995,7 +1006,6 @@ export class RestaurantService {
           },
         },
         operatingHours: true,
-        owner: true,
       },
     });
 
@@ -1023,17 +1033,11 @@ export class RestaurantService {
 
     const validatedUser = validation.user;
 
-    // Upsert the user into the restaurants DB local copy
-    await this.prisma.user.upsert({
-      where: { id: userId },
-      update: { role: role as any },
-      create: {
-        id: userId,
-        name: validatedUser.name,
-        email: validatedUser.email,
-        password: 'managed-by-users-service',
-        role: role as any,
-      },
+    // Upsert staff assignment in restaurants DB
+    await this.prisma.staffMember.upsert({
+      where: { restaurantId_userId: { restaurantId, userId } },
+      update: { role },
+      create: { restaurantId, userId, role },
     });
 
     const updatedRestaurant = await this.prisma.restaurant.findUnique({
@@ -1043,7 +1047,7 @@ export class RestaurantService {
         categories: true,
         menuItems: { include: { images: true, category: true, menu: true } },
         operatingHours: true,
-        owner: true,
+        staffMembers: true,
       },
     });
 
@@ -1067,17 +1071,10 @@ export class RestaurantService {
       throw new BadRequestException(`User not found: ${validation.error}`);
     }
 
-    // Update local copy role back to User
-    await this.prisma.user.upsert({
-      where: { id: userId },
-      update: { role: 'User' as any },
-      create: {
-        id: userId,
-        name: validation.user.name,
-        email: validation.user.email,
-        password: 'managed-by-users-service',
-        role: 'User' as any,
-      },
+    // No local User record to modify — users service is the source of truth
+    // Remove staff assignment from restaurants DB
+    await this.prisma.staffMember.deleteMany({
+      where: { restaurantId, userId },
     });
 
     const updatedRestaurant = await this.prisma.restaurant.findUnique({
@@ -1087,7 +1084,7 @@ export class RestaurantService {
         categories: true,
         menuItems: { include: { images: true, category: true, menu: true } },
         operatingHours: true,
-        owner: true,
+        staffMembers: true,
       },
     });
 

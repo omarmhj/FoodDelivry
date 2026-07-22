@@ -38,7 +38,7 @@ export class NotificationsService {
 
       this.logger.log(`✅ Notification created: ${notification.id} for user: ${dto.userId}`);
       return notification;
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`❌ Failed to create notification:`, error.message);
       throw error;
     }
@@ -84,7 +84,7 @@ export class NotificationsService {
 
       this.logger.log(`📧 Email sent to: ${dto.to}`);
       return { success: true, message: 'Email sent successfully' };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`❌ Failed to send email:`, error.message);
 
       // Log failed notification
@@ -139,7 +139,7 @@ export class NotificationsService {
       });
 
       return { success: true, message: 'SMS sent successfully (mock)' };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`❌ Failed to send SMS:`, error.message);
 
       // Log failed notification
@@ -194,7 +194,7 @@ export class NotificationsService {
       });
 
       return { success: true, message: 'Push notification sent successfully (mock)' };
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`❌ Failed to send push notification:`, error.message);
 
       // Log failed notification
@@ -219,6 +219,16 @@ export class NotificationsService {
     this.logger.log(`📦 Order placed event received: ${data.orderNumber}`);
 
     try {
+      // Idempotency check — skip if already processed this order
+      const idempotencyKey = `notif:order.placed:${data.orderId}`;
+      const alreadyProcessed = await this.redisService.exists(idempotencyKey);
+      if (alreadyProcessed) {
+        this.logger.warn(`⚠️ Duplicate order.placed event for ${data.orderNumber} — skipping`);
+        return;
+      }
+      // Mark as processed (TTL 7 days)
+      await this.redisService.set(idempotencyKey, '1', 604800);
+
       // Create notification in database
       await this.createNotification({
         userId: data.customerId,
@@ -243,7 +253,7 @@ export class NotificationsService {
             userId: data.customerId,
             type: NotificationType.ORDER_UPDATE,
           });
-        } catch (emailError) {
+        } catch (emailError: any) {
           this.logger.warn(`⚠️ Email notification failed but continuing: ${emailError.message}`);
         }
       }
@@ -260,12 +270,12 @@ export class NotificationsService {
             orderNumber: data.orderNumber,
           },
         });
-      } catch (pushError) {
+      } catch (pushError: any) {
         this.logger.warn(`⚠️ Push notification failed but continuing: ${pushError.message}`);
       }
 
       this.logger.log(`✅ Order placed notifications processed for order: ${data.orderNumber}`);
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`❌ Failed to handle order placed event:`, error.message);
       throw error;
     }
@@ -302,7 +312,7 @@ export class NotificationsService {
             userId: data.customerId,
             type: NotificationType.ORDER_UPDATE,
           });
-        } catch (emailError) {
+        } catch (emailError: any) {
           this.logger.warn(`⚠️ Email notification failed but continuing: ${emailError.message}`);
         }
       }
@@ -320,12 +330,12 @@ export class NotificationsService {
             status: data.status,
           },
         });
-      } catch (pushError) {
+      } catch (pushError: any) {
         this.logger.warn(`⚠️ Push notification failed but continuing: ${pushError.message}`);
       }
 
       this.logger.log(`✅ Order status update notifications processed for order: ${data.orderNumber}`);
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`❌ Failed to handle order status updated event:`, error.message);
       throw error;
     }
@@ -354,7 +364,7 @@ export class NotificationsService {
       }
 
       this.logger.log(`✅ Order review notifications sent for order: ${data.orderId}`);
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`❌ Failed to handle order reviewed event:`, error.message);
     }
   }
@@ -388,7 +398,7 @@ export class NotificationsService {
           sentAt: data.status === 'SENT' ? new Date() : null,
         },
       });
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`❌ Failed to log notification:`, error.message);
     }
   }
@@ -475,7 +485,7 @@ export class NotificationsService {
       });
 
       return notifications;
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`❌ Failed to get notifications:`, error.message);
       throw error;
     }
@@ -529,11 +539,11 @@ export class NotificationsService {
             userId: data.customerId,
             type: NotificationType.RESERVATION_CONFIRMATION,
           });
-        } catch (emailError) {
+        } catch (emailError: any) {
           this.logger.warn(`⚠️ Reservation email failed: ${emailError.message}`);
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`❌ Failed to handle reservation.created:`, error.message);
       throw error;
     }
@@ -572,11 +582,11 @@ export class NotificationsService {
             userId: data.customerId,
             type: NotificationType.RESERVATION_CONFIRMATION,
           });
-        } catch (emailError) {
+        } catch (emailError: any) {
           this.logger.warn(`⚠️ Confirmation email failed: ${emailError.message}`);
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`❌ Failed to handle reservation.confirmed:`, error.message);
       throw error;
     }
@@ -617,12 +627,58 @@ export class NotificationsService {
             userId: data.customerId,
             type: NotificationType.RESERVATION_CONFIRMATION,
           });
-        } catch (emailError) {
+        } catch (emailError: any) {
           this.logger.warn(`⚠️ Cancellation email failed: ${emailError.message}`);
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`❌ Failed to handle reservation.cancelled:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle reservation.status.updated, reservation.completed, reservation.no_show events
+   */
+  async handleReservationStatusUpdated(data: any) {
+    this.logger.log(`🔄 Reservation status updated: ${data.reservationNumber} → ${data.status}`);
+
+    try {
+      const statusLabel = data.status.replace(/_/g, ' ').toLowerCase();
+
+      await this.createNotification({
+        userId: data.customerId,
+        type: NotificationType.RESERVATION_CONFIRMATION,
+        title: `Reservation ${data.status.replace(/_/g, ' ')}`,
+        message: `Your reservation #${data.reservationNumber} at ${data.restaurantName} is now ${statusLabel}.`,
+        metadata: {
+          reservationId: data.reservationId,
+          reservationNumber: data.reservationNumber,
+          status: data.status,
+          previousStatus: data.previousStatus,
+        },
+      });
+
+      if (data.customerEmail) {
+        try {
+          await this.sendEmailNotification({
+            to: data.customerEmail,
+            subject: `Reservation Update - ${data.reservationNumber}`,
+            content: `
+              <h2>Reservation Status Update</h2>
+              <p>Your reservation <strong>#${data.reservationNumber}</strong> at <strong>${data.restaurantName}</strong> has been updated.</p>
+              <p><strong>New Status:</strong> ${statusLabel}</p>
+              <p>Best regards,<br/>SnackRapido Team</p>
+            `,
+            userId: data.customerId,
+            type: NotificationType.RESERVATION_CONFIRMATION,
+          });
+        } catch (emailError: any) {
+          this.logger.warn(`⚠️ Status update email failed: ${emailError.message}`);
+        }
+      }
+    } catch (error: any) {
+      this.logger.error(`❌ Failed to handle reservation.status.updated:`, error.message);
       throw error;
     }
   }
@@ -639,7 +695,7 @@ export class NotificationsService {
 
       this.logger.log(`✅ Notification marked as read: ${notificationId}`);
       return notification;
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`❌ Failed to mark notification as read:`, error.message);
       throw error;
     }

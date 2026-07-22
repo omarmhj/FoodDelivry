@@ -1,6 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { User } from '@prisma/client';
+import { User } from '.prisma/users-client';
 
 export class TokenSender {
   constructor(
@@ -17,7 +17,7 @@ export class TokenSender {
       },
       {
         secret: this.config.get<string>('ACCESS_TOKEN_SECRET'),
-        expiresIn: '15m', // 15 minutes for testing (use 5m in production)
+        expiresIn: '7d', // 7 days for development
       },
     );
 

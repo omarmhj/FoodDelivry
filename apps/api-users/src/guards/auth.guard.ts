@@ -88,7 +88,7 @@ import {
           { id: user.id, email: user.email, role: user.role },
           {
             secret: this.config.get<string>('ACCESS_TOKEN_SECRET'),
-            expiresIn: '15m',
+            expiresIn: '7d',
           },
         );
   

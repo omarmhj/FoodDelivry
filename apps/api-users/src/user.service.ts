@@ -12,7 +12,7 @@ import { Response } from 'express';
 import * as bcrypt from 'bcrypt';
 import { EmailService } from './email/email.service';
 import { TokenSender } from './utils/sendToken';
-import { User } from '@prisma/client';
+import { User } from '.prisma/users-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../../../libs/shared/src/redis.service';
 
@@ -378,6 +378,66 @@ export class UsersService {
     } catch (error) {
       this.logger.error(`❌ Get user failed: ${error.message}`);
       return { user: null, error: 'Failed to get user' };
+    }
+  }
+
+  // Refresh access token using refresh token
+  async refreshAccessToken(refreshToken: string) {
+    try {
+      // Check if refresh token is blacklisted
+      const isBlacklisted = await this.redisService.exists(`bl:${refreshToken}`);
+      if (isBlacklisted) {
+        return {
+          accessToken: undefined,
+          refreshToken: undefined,
+          error: { message: 'Session revoked. Please login again.' },
+        };
+      }
+
+      // Verify refresh token
+      const decoded = this.jwtService.verify(refreshToken, {
+        secret: this.configService.get<string>('REFRESH_TOKEN_SECRET'),
+      });
+
+      if (!decoded || !decoded.id) {
+        return {
+          accessToken: undefined,
+          refreshToken: undefined,
+          error: { message: 'Invalid refresh token' },
+        };
+      }
+
+      // Get user from database
+      const user = await this.prisma.user.findUnique({
+        where: { id: decoded.id },
+      });
+
+      if (!user) {
+        return {
+          accessToken: undefined,
+          refreshToken: undefined,
+          error: { message: 'User not found' },
+        };
+      }
+
+      // Generate new tokens
+      const tokenSender = new TokenSender(this.configService, this.jwtService);
+      const tokens = tokenSender.sendToken(user);
+
+      this.logger.log(`🔄 Tokens refreshed for user: ${user.email}`);
+
+      return {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        error: undefined,
+      };
+    } catch (error) {
+      this.logger.warn(`❌ Token refresh failed: ${error.message}`);
+      return {
+        accessToken: undefined,
+        refreshToken: undefined,
+        error: { message: 'Invalid or expired refresh token. Please login again.' },
+      };
     }
   }
 }

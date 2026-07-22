@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../../../node_modules/.prisma/restaurants-client"
 }
 
 datasource db {
@@ -7,45 +8,24 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  Admin
-  User
-  Owner
-  Staff
-}
+model StaffMember {
+  id           String     @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId String     @db.ObjectId
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  userId       String     @db.ObjectId  // plain string — resolved via RabbitMQ
+  role         String     // "Restaurant_Staff" or "Restaurant_Owner"
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
-model Avatars {
-  id        String @id @default(auto()) @map("_id") @db.ObjectId
-  public_id String
-  url       String
-  user      User   @relation(fields: [userId], references: [id])
-  userId    String @unique @db.ObjectId
-}
-
-model User {
-  id           String      @id @default(auto()) @map("_id") @db.ObjectId
-  name         String
-  email        String      @unique
-  phone_number Float?
-  address      String?
-  password     String
-  avatar       Avatars?
-  reviews      Reviews[]
-  role         Role        @default(User)
-  restaurants  Restaurant[] @relation("RestaurantOwner")
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-
-  @@unique([email, phone_number], name: "unique_email_phone_number")
+  @@unique([restaurantId, userId])
 }
 
 model Reviews {
-  id     String @id @default(auto()) @map("_id") @db.ObjectId
+  id     String   @id @default(auto()) @map("_id") @db.ObjectId
   review String
   rating Float
-  userId String @db.ObjectId
-  user   User   @relation(fields: [userId], references: [id])
-  foodId String @db.ObjectId
+  userId String   @db.ObjectId // plain string, resolved via RabbitMQ
+  foodId String   @db.ObjectId
   food   MenuItem @relation(fields: [foodId], references: [id])
 }
 
@@ -58,14 +38,14 @@ model Images {
 }
 
 model Category {
-  id           String     @id @default(auto()) @map("_id") @db.ObjectId
+  id           String      @id @default(auto()) @map("_id") @db.ObjectId
   name         String
   description  String?
-  restaurantId String?    @db.ObjectId
+  restaurantId String?     @db.ObjectId
   restaurant   Restaurant? @relation(fields: [restaurantId], references: [id])
   menuItems    MenuItem[]
-  createdAt    DateTime?  @default(now())
-  updatedAt    DateTime?  @updatedAt
+  createdAt    DateTime?   @default(now())
+  updatedAt    DateTime?   @updatedAt
 }
 
 model Menu {
@@ -110,23 +90,23 @@ model OperatingHours {
 }
 
 model Restaurant {
-  id            String          @id @default(auto()) @map("_id") @db.ObjectId
-  name          String
-  country       String
-  city          String
-  address       String
-  email         String          @unique
-  phone_number  Float?
-  password      String
-  coordinates   GeoPoint?       // Geospatial coordinates
-  menus         Menu[]
-  categories    Category[]
-  menuItems     MenuItem[]
+  id             String           @id @default(auto()) @map("_id") @db.ObjectId
+  name           String
+  country        String
+  city           String
+  address        String
+  email          String           @unique
+  phone_number   Float?
+  password       String
+  coordinates    GeoPoint?        // Geospatial coordinates
+  menus          Menu[]
+  categories     Category[]
+  menuItems      MenuItem[]
   operatingHours OperatingHours[]
-  ownerId       String?         @db.ObjectId
-  owner         User?           @relation("RestaurantOwner", fields: [ownerId], references: [id])
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  ownerId        String?          @db.ObjectId // plain string, resolved via RabbitMQ
+  staffMembers   StaffMember[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   @@unique([email, phone_number], name: "unique_email_phone_number")
   @@index([coordinates])
@@ -134,5 +114,5 @@ model Restaurant {
 
 type GeoPoint {
   type        String   @default("Point")
-  coordinates Float[] // [longitude, latitude]
+  coordinates Float[]  // [longitude, latitude]
 }

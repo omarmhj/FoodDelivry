@@ -11,6 +11,7 @@ import { OrdersService } from './orders.service';
 import { OrdersResolver } from './orders.resolver';
 import { AuthGuard } from './guards/auth.guard';
 import { SharedModule } from '../../../libs/shared/src/shared.module';
+import { RedisService } from '../../../libs/shared/src/redis.service';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { SharedModule } from '../../../libs/shared/src/shared.module';
     AuthGuard,
     ConfigService,
     JwtService,
+    RedisService,
   ],
   exports: [OrdersService, PrismaService],
 })
