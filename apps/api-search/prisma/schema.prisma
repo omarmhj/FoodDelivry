@@ -1,0 +1,49 @@
+// Prisma Schema for Search Service (READ-ONLY view of the Restaurants database)
+// The search service reads restaurant + menu data directly to power full-text
+// and geospatial search. It does NOT own this data — api-restaurants does.
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../node_modules/.prisma/search-client"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// Read model — mirrors the Restaurant collection in snackrapido_restaurants
+model Restaurant {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  name         String
+  country      String
+  city         String
+  address      String
+  email        String
+  phone_number Float?
+  coordinates  GeoPoint?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("Restaurant")
+}
+
+// Read model — mirrors the MenuItem collection in snackrapido_restaurants
+model MenuItem {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  name         String
+  description  String
+  price        Float
+  available    Boolean  @default(true)
+  categoryId   String?  @db.ObjectId
+  menuId       String?  @db.ObjectId
+  restaurantId String   @db.ObjectId
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("MenuItem")
+}
+
+type GeoPoint {
+  type        String  @default("Point")
+  coordinates Float[] // [longitude, latitude]
+}

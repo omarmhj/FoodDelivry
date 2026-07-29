@@ -1,0 +1,53 @@
+{
+  "name": "api-chat",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/api-chat/src",
+  "projectType": "application",
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/api-chat",
+        "main": "apps/api-chat/src/main.ts",
+        "tsConfig": "apps/api-chat/tsconfig.app.json",
+        "assets": ["apps/api-chat/src/assets"],
+        "webpackConfig": "apps/api-chat/webpack.config.js"
+      },
+      "configurations": {
+        "development": {},
+        "production": {}
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "options": {
+        "buildTarget": "api-chat:build"
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "api-chat:build:development"
+        },
+        "production": {
+          "buildTarget": "api-chat:build:production"
+        }
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "apps/api-chat/jest.config.ts"
+      }
+    }
+  },
+  "tags": []
+}

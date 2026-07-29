@@ -164,4 +164,14 @@ export class AnalyticsController {
     this.logger.log(`👻 [${new Date().toISOString()}] Received reservation.no_show: ${data.reservationNumber}`);
     channel.ack(originalMsg);
   }
+
+  // ==================== CHAT EVENTS ====================
+
+  @EventPattern('message.sent')
+  async handleMessageSent(@Payload() data: any, @Ctx() context: RmqContext) {
+    const channel = context.getChannelRef();
+    const originalMsg = context.getMessage();
+    this.logger.log(`💬 [${new Date().toISOString()}] Received message.sent: conversation ${data.conversationId}`);
+    channel.ack(originalMsg);
+  }
 }

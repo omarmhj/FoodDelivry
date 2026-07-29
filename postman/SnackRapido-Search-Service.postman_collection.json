@@ -1,0 +1,199 @@
+{
+  "info": {
+    "name": "SnackRapido - Search & Recommendations Service",
+    "description": "GraphQL API for the Search Service (port 4005). Reads the Restaurants DB (search) and Orders DB (recommendations). Search/menu/nearby queries are PUBLIC. Recommendations require a USER access token in the 'accesstoken' header. Every response returns a 'cached' boolean — run a query twice to see it flip to true (Redis).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:4005/graphql" },
+    { "key": "user_access_token", "value": "" },
+    { "key": "longitude", "value": "10.18" },
+    { "key": "latitude", "value": "36.80" }
+  ],
+  "item": [
+    {
+      "name": "Restaurant Search (Public)",
+      "item": [
+        {
+          "name": "Search Restaurants - basic",
+          "description": "Full-text search over restaurant name, city, address, country. No auth required.",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query SearchRestaurants($input: SearchRestaurantsDto!) {\n  searchRestaurants(input: $input) {\n    total\n    cached\n    results {\n      id\n      name\n      city\n      address\n      country\n      longitude\n      latitude\n    }\n    error { message code }\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"query\": \"pizza\",\n    \"limit\": 20,\n    \"skip\": 0\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Search Restaurants - filter by city",
+          "description": "Restrict results to a specific city.",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query SearchRestaurants($input: SearchRestaurantsDto!) {\n  searchRestaurants(input: $input) {\n    total\n    cached\n    results {\n      id\n      name\n      city\n    }\n    error { message code }\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"query\": \"palace\",\n    \"city\": \"Tunis\"\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Search Restaurants - cache check (run twice)",
+          "description": "Run this request twice. First response: cached=false. Second (within 5 min): cached=true.",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query SearchRestaurants($input: SearchRestaurantsDto!) {\n  searchRestaurants(input: $input) {\n    total\n    cached\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"query\": \"burger\"\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Menu Item Search (Public)",
+      "item": [
+        {
+          "name": "Search Menu Items - basic",
+          "description": "Full-text search over menu item name and description. Returns the owning restaurant name.",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query SearchMenuItems($input: SearchMenuItemsDto!) {\n  searchMenuItems(input: $input) {\n    total\n    cached\n    results {\n      id\n      name\n      description\n      price\n      available\n      restaurantId\n      restaurantName\n    }\n    error { message code }\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"query\": \"cheese\",\n    \"limit\": 20\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Search Menu Items - with maxPrice",
+          "description": "Only return items at or below maxPrice.",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query SearchMenuItems($input: SearchMenuItemsDto!) {\n  searchMenuItems(input: $input) {\n    total\n    cached\n    results {\n      name\n      price\n      restaurantName\n    }\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"query\": \"burger\",\n    \"maxPrice\": 12.0\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Nearby / Geospatial (Public)",
+      "item": [
+        {
+          "name": "Nearby Restaurants - Tunis center",
+          "description": "Geospatial $geoNear search. Uses collection variables {{longitude}} and {{latitude}}. Returns distanceKm. Requires a 2dsphere index on Restaurant.coordinates (auto-created on service startup).",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query Nearby($input: NearbyRestaurantsDto!) {\n  nearbyRestaurants(input: $input) {\n    total\n    cached\n    results {\n      id\n      name\n      city\n      distanceKm\n      longitude\n      latitude\n    }\n    error { message code }\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"longitude\": {{longitude}},\n    \"latitude\": {{latitude}},\n    \"maxDistanceKm\": 50,\n    \"limit\": 20\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Nearby Restaurants - tight radius (2km)",
+          "description": "Small radius to demonstrate distance filtering.",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query Nearby($input: NearbyRestaurantsDto!) {\n  nearbyRestaurants(input: $input) {\n    total\n    cached\n    results {\n      name\n      distanceKm\n    }\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"longitude\": {{longitude}},\n    \"latitude\": {{latitude}},\n    \"maxDistanceKm\": 2,\n    \"limit\": 10\n  }\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Recommendations (User Auth)",
+      "description": "Requires a USER access token. Paste a valid token into the 'user_access_token' collection variable (get it from the Users Service login mutation).",
+      "item": [
+        {
+          "name": "Get Recommendations",
+          "description": "Personalized recommendations derived from the logged-in customer's order history. 'reorder' = restaurants ordered before (frequency-ranked), 'discover' = restaurants not yet tried.",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "accesstoken", "value": "{{user_access_token}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query Recommendations($limit: Int) {\n  recommendations(limit: $limit) {\n    cached\n    reorder {\n      id\n      name\n      city\n    }\n    discover {\n      id\n      name\n      city\n    }\n    error { message code }\n  }\n}",
+                "variables": "{\n  \"limit\": 5\n}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        },
+        {
+          "name": "Get Recommendations - no token (expect 401)",
+          "description": "Negative test: without the accesstoken header the AuthGuard rejects the request.",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query Recommendations {\n  recommendations(limit: 5) {\n    reorder { name }\n    error { message code }\n  }\n}",
+                "variables": "{}"
+              }
+            },
+            "url": { "raw": "{{base_url}}", "host": ["{{base_url}}"] }
+          }
+        }
+      ]
+    }
+  ]
+}

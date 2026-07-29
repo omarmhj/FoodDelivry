@@ -200,4 +200,22 @@ export class NotificationsController {
     }
     channel.ack(originalMsg);
   }
+
+  // ==================== CHAT EVENTS ====================
+
+  @EventPattern('message.sent')
+  async handleMessageSent(@Payload() data: any, @Ctx() context: RmqContext) {
+    const channel = context.getChannelRef();
+    const originalMsg = context.getMessage();
+
+    this.logger.log(`💬 Received message.sent event for conversation: ${data.conversationId}`);
+
+    try {
+      await this.notificationsService.handleMessageSent(data);
+      this.logger.log(`✅ Processed message.sent event`);
+    } catch (error) {
+      this.logger.error(`❌ Error handling message.sent:`, error.message);
+    }
+    channel.ack(originalMsg);
+  }
 }

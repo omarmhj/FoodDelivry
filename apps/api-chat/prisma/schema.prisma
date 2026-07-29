@@ -1,0 +1,46 @@
+// Prisma Schema for Chat Service
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../node_modules/.prisma/chat-client"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// A conversation between two or more participants (e.g. customer <-> restaurant)
+model Conversation {
+  id             String    @id @default(auto()) @map("_id") @db.ObjectId
+  // Participant user/restaurant ids (plain strings, resolved via other services)
+  participants   String[]
+  // Optional context: which restaurant / order this conversation is about
+  restaurantId   String?   @db.ObjectId
+  orderId        String?   @db.ObjectId
+  lastMessage    String?
+  lastMessageAt  DateTime?
+  messages       Message[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([restaurantId])
+  @@index([orderId])
+  @@map("Conversation")
+}
+
+model Message {
+  id             String       @id @default(auto()) @map("_id") @db.ObjectId
+  conversationId String       @db.ObjectId
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  senderId       String       // user or restaurant id
+  senderName     String
+  content        String
+  // Delivery tracking
+  readBy         String[]     // ids of participants who have read this message
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([createdAt])
+  @@map("Message")
+}

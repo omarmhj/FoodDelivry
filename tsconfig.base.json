@@ -17,8 +17,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./apps/*"],
-      "@prisma/orders-client": ["./node_modules/.prisma/orders-client"],
-      "@prisma/analytics-client": ["./node_modules/.prisma/analytics-client"]
+      "@prisma/analytics-client": ["./node_modules/.prisma/analytics-client"],
+      "@prisma/orders-client": ["./node_modules/.prisma/orders-client"]
     }
   },
   "exclude": ["node_modules", "tmp"]

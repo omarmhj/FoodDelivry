@@ -1,0 +1,53 @@
+{
+  "name": "api-search",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/api-search/src",
+  "projectType": "application",
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/api-search",
+        "main": "apps/api-search/src/main.ts",
+        "tsConfig": "apps/api-search/tsconfig.app.json",
+        "assets": ["apps/api-search/src/assets"],
+        "webpackConfig": "apps/api-search/webpack.config.js"
+      },
+      "configurations": {
+        "development": {},
+        "production": {}
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "options": {
+        "buildTarget": "api-search:build"
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "api-search:build:development"
+        },
+        "production": {
+          "buildTarget": "api-search:build:production"
+        }
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "apps/api-search/jest.config.ts"
+      }
+    }
+  },
+  "tags": []
+}

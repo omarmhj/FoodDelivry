@@ -17,3 +17,9 @@
 
 dist/docs/
 dist/
+
+# internal docs (not for public repo)
+/docs/
+
+# Next.js
+.next

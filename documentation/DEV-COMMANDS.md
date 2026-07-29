@@ -363,3 +363,7 @@ All should return healthy responses (`PONG` for Redis, `{ ok: 1 }` for Mongo, a 
 
 See also: `Food-Delivery-WebApp/postman/TESTING-GUIDE.md` for the full end-to-end
 testing flow (phases, event maps, cache key reference, smoke test checklist).
+
+User: john@example.com / password123
+Restaurant: pizzapalace@snackrapido.com or burgerbarn@snackrapido.com / Password123!
+Admin: admin@snackrapido.com / admin123

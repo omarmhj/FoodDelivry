@@ -684,6 +684,47 @@ export class NotificationsService {
   }
 
   /**
+   * Handle message.sent event — notify offline recipients of a new chat message
+   */
+  async handleMessageSent(data: any) {
+    this.logger.log(`💬 Message sent in conversation ${data.conversationId} from ${data.senderName}`);
+
+    const recipients: string[] = data.recipients || [];
+    const preview = (data.content || '').slice(0, 120);
+
+    for (const recipientId of recipients) {
+      try {
+        await this.createNotification({
+          userId: recipientId,
+          type: NotificationType.CHAT_MESSAGE,
+          title: `New message from ${data.senderName}`,
+          message: preview,
+          metadata: {
+            conversationId: data.conversationId,
+            messageId: data.messageId,
+            senderId: data.senderId,
+          },
+        });
+
+        // Mock push notification for the new message (non-blocking)
+        try {
+          await this.sendPushNotification({
+            userId: recipientId,
+            type: NotificationType.CHAT_MESSAGE,
+            title: `New message from ${data.senderName}`,
+            message: preview,
+            data: { conversationId: data.conversationId },
+          });
+        } catch (pushError: any) {
+          this.logger.warn(`⚠️ Chat push notification failed: ${pushError.message}`);
+        }
+      } catch (error: any) {
+        this.logger.error(`❌ Failed to notify recipient ${recipientId}:`, error.message);
+      }
+    }
+  }
+
+  /**
    * Mark notification as read
    */
   async markAsRead(notificationId: string) {
