@@ -348,6 +348,11 @@ export class UsersService {
           name: user.name,
           email: user.email,
           phone_number: user.phone_number,
+          // Callers authorize on this: api-restaurants checks for
+          // 'Restaurant_Owner' before accepting an ownerId, api-orders checks
+          // for 'Admin', and the api-orders AuthGuard needs it to re-issue an
+          // access token without losing the caller's role.
+          role: user.role,
         },
       };
       return response;

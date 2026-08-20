@@ -37,6 +37,10 @@ import { RedisModule } from './redis.module';
             queueOptions: {
               durable: true,
             },
+            socketOptions: {
+              heartbeatIntervalInSeconds: 60,
+              reconnectTimeInSeconds: 5,
+            },
           },
         }),
         inject: [ConfigService],
@@ -51,6 +55,10 @@ import { RedisModule } from './redis.module';
             queue: 'analytics_queue',
             queueOptions: {
               durable: true,
+            },
+            socketOptions: {
+              heartbeatIntervalInSeconds: 60,
+              reconnectTimeInSeconds: 5,
             },
           },
         }),

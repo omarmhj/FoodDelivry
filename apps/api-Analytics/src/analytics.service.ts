@@ -130,33 +130,47 @@ export class AnalyticsService {
    */
   async handleOrderCancelled(data: any) {
     this.logger.log(`📊 Processing order.cancelled event: ${data.orderNumber}`);
+    await this.recordLostOrder(data, 'customer_cancelled');
+  }
 
+  /**
+   * Handle order.rejected event
+   *
+   * Recorded the same way as a cancellation but tagged distinctly, so reports can
+   * tell orders the customer withdrew apart from orders the restaurant declined.
+   */
+  async handleOrderRejected(data: any) {
+    this.logger.log(`📊 Processing order.rejected event: ${data.orderNumber}`);
+    await this.recordLostOrder(data, 'restaurant_rejected');
+  }
+
+  private async recordLostOrder(data: any, cancellationType: string) {
     try {
       const eventDate = new Date(data.timestamp || Date.now());
 
-      // Track cancellation metric
+      // Track the reversal metric
       await this.trackMetric(
         data.restaurantId,
         AnalyticsType.ORDER_VOLUME,
-        -1, // Negative to indicate cancellation
+        -1, // Negative to indicate the order no longer counts
         eventDate,
         {
           orderId: data.orderId,
           orderNumber: data.orderNumber,
           previousStatus: data.previousStatus,
-          cancellationType: 'customer_cancelled',
+          cancellationType,
         },
       );
 
-      // Update daily report to reflect cancellation
+      // Update daily report to reflect the lost order
       await this.updateDailyAnalyticsForCancellation(data.restaurantId, eventDate, data.total || 0);
 
       // Invalidate cache
       await this.invalidateAnalyticsCache(data.restaurantId);
 
-      this.logger.log(`✅ Cancellation analytics recorded for: ${data.orderNumber}`);
+      this.logger.log(`✅ ${cancellationType} analytics recorded for: ${data.orderNumber}`);
     } catch (error) {
-      this.logger.error(`❌ Failed to process cancellation analytics:`, error.message);
+      this.logger.error(`❌ Failed to process ${cancellationType} analytics:`, error.message);
       throw error;
     }
   }

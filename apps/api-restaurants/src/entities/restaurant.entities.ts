@@ -1,7 +1,7 @@
 import { ObjectType, Field, Directive, Float } from '@nestjs/graphql';
-import { MenuItem } from '../MenuItem/entities/menu-item.entities';
+import { ItemOption, MenuItem, OptionGroup } from '../MenuItem/entities/menu-item.entities';
 
-export { MenuItem };
+export { ItemOption, MenuItem, OptionGroup };
 
 @ObjectType()
 export class GeoPoint {

@@ -34,16 +34,25 @@ async function bootstrap() {
     );
 
     // CORS configuration
+    const corsOrigins = process.env.CORS_ORIGINS
+      ? process.env.CORS_ORIGINS.split(',').map((s) => s.trim())
+      : [
+          'http://localhost:3000',
+          'http://localhost:3001',
+          'http://localhost:4000',
+          'http://localhost:4001',
+          'http://localhost:4002',
+          'http://localhost:4003',
+          'http://localhost:5173',
+          'http://127.0.0.1:5173',
+          'http://localhost:5174',
+          'http://127.0.0.1:5174',
+          'http://localhost:4173',
+          'https://studio.apollographql.com',
+        ];
+
     app.enableCors({
-      origin: [
-        'http://localhost:3000',
-        'http://localhost:3001',
-        'http://localhost:4000',
-        'http://localhost:4001',
-        'http://localhost:4002',
-        'http://localhost:4003',
-        'https://studio.apollographql.com',
-      ],
+      origin: corsOrigins,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowedHeaders: [
@@ -57,6 +66,8 @@ async function bootstrap() {
         'Access-Control-Allow-Methods',
         'accesstoken',
         'refreshtoken',
+        'access-token',
+        'refresh-token',
       ],
     });
 
@@ -71,6 +82,10 @@ async function bootstrap() {
         },
         prefetchCount: 100,
         noAck: false,
+        socketOptions: {
+          heartbeatIntervalInSeconds: 60,
+          reconnectTimeInSeconds: 5,
+        },
       },
     });
 

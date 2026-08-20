@@ -1,5 +1,16 @@
-import { Field, Float, InputType } from '@nestjs/graphql';
-import { IsNotEmpty, IsOptional, IsString, IsNumber, IsArray } from 'class-validator';
+import { Field, Float, InputType, Int } from '@nestjs/graphql';
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsNumber,
+  IsArray,
+  IsBoolean,
+  IsInt,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 
 @InputType()
 export class GeoPointInput {
@@ -190,6 +201,12 @@ export class CreateMenuItemDto {
   @IsNumber({}, { message: 'Estimated price must be a number.' })
   estimatedPrice?: number;
 
+  @Field(() => Int, { nullable: true })
+  @IsOptional()
+  @IsInt({ message: 'Calories must be an integer.' })
+  @Min(0, { message: 'Calories must be positive.' })
+  calories?: number;
+
   @Field({ nullable: true })
   @IsOptional()
   @IsString({ message: 'Category ID must be a string.' })
@@ -236,6 +253,12 @@ export class UpdateMenuItemDto {
   @IsNumber({}, { message: 'Estimated price must be a number.' })
   estimatedPrice?: number;
 
+  @Field(() => Int, { nullable: true })
+  @IsOptional()
+  @IsInt({ message: 'Calories must be an integer.' })
+  @Min(0, { message: 'Calories must be positive.' })
+  calories?: number;
+
   @Field({ nullable: true })
   @IsOptional()
   @IsString({ message: 'Category ID must be a string.' })
@@ -257,6 +280,192 @@ export class DeleteMenuItemDto {
   @IsNotEmpty({ message: 'Menu item ID is required.' })
   @IsString({ message: 'Menu item ID must be a string.' })
   id: string;
+}
+
+// ==================== OPTION GROUP / ITEM OPTION DTOs ====================
+
+/**
+ * An option supplied inline while creating a group, so an owner can define
+ * "Choose your sauce" and all of its choices in a single mutation.
+ */
+@InputType()
+export class NestedItemOptionDto {
+  @Field()
+  @IsNotEmpty({ message: 'Option name is required.' })
+  @IsString({ message: 'Option name must be a string.' })
+  name: string;
+
+  @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber({}, { message: 'Price delta must be a number.' })
+  priceDelta?: number;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsBoolean({ message: 'Available must be a boolean.' })
+  available?: boolean;
+
+  @Field(() => Int, { nullable: true })
+  @IsOptional()
+  @IsInt({ message: 'Display order must be an integer.' })
+  displayOrder?: number;
+}
+
+@InputType()
+export class CreateOptionGroupDto {
+  @Field()
+  @IsNotEmpty({ message: 'Menu item ID is required.' })
+  @IsString({ message: 'Menu item ID must be a string.' })
+  menuItemId: string;
+
+  @Field()
+  @IsNotEmpty({ message: 'Option group name is required.' })
+  @IsString({ message: 'Option group name must be a string.' })
+  name: string;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsBoolean({ message: 'Required must be a boolean.' })
+  required?: boolean;
+
+  @Field(() => Int, { nullable: true })
+  @IsOptional()
+  @IsInt({ message: 'Min select must be an integer.' })
+  @Min(0, { message: 'Min select must be zero or more.' })
+  minSelect?: number;
+
+  @Field(() => Int, { nullable: true })
+  @IsOptional()
+  @IsInt({ message: 'Max select must be an integer.' })
+  @Min(1, { message: 'Max select must be at least 1.' })
+  maxSelect?: number;
+
+  @Field(() => Int, { nullable: true })
+  @IsOptional()
+  @IsInt({ message: 'Display order must be an integer.' })
+  displayOrder?: number;
+
+  @Field(() => [NestedItemOptionDto], { nullable: true })
+  @IsOptional()
+  @IsArray({ message: 'Options must be an array.' })
+  @ValidateNested({ each: true })
+  @Type(() => NestedItemOptionDto)
+  options?: NestedItemOptionDto[];
+}
+
+@InputType()
+export class UpdateOptionGroupDto {
+  @Field()
+  @IsNotEmpty({ message: 'Option group ID is required.' })
+  @IsString({ message: 'Option group ID must be a string.' })
+  id: string;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString({ message: 'Option group name must be a string.' })
+  name?: string;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsBoolean({ message: 'Required must be a boolean.' })
+  required?: boolean;
+
+  @Field(() => Int, { nullable: true })
+  @IsOptional()
+  @IsInt({ message: 'Min select must be an integer.' })
+  @Min(0, { message: 'Min select must be zero or more.' })
+  minSelect?: number;
+
+  @Field(() => Int, { nullable: true })
+  @IsOptional()
+  @IsInt({ message: 'Max select must be an integer.' })
+  @Min(1, { message: 'Max select must be at least 1.' })
+  maxSelect?: number;
+
+  @Field(() => Int, { nullable: true })
+  @IsOptional()
+  @IsInt({ message: 'Display order must be an integer.' })
+  displayOrder?: number;
+}
+
+@InputType()
+export class DeleteOptionGroupDto {
+  @Field()
+  @IsNotEmpty({ message: 'Option group ID is required.' })
+  @IsString({ message: 'Option group ID must be a string.' })
+  id: string;
+}
+
+@InputType()
+export class CreateItemOptionDto {
+  @Field()
+  @IsNotEmpty({ message: 'Option group ID is required.' })
+  @IsString({ message: 'Option group ID must be a string.' })
+  optionGroupId: string;
+
+  @Field()
+  @IsNotEmpty({ message: 'Option name is required.' })
+  @IsString({ message: 'Option name must be a string.' })
+  name: string;
+
+  @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber({}, { message: 'Price delta must be a number.' })
+  priceDelta?: number;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsBoolean({ message: 'Available must be a boolean.' })
+  available?: boolean;
+
+  @Field(() => Int, { nullable: true })
+  @IsOptional()
+  @IsInt({ message: 'Display order must be an integer.' })
+  displayOrder?: number;
+}
+
+@InputType()
+export class UpdateItemOptionDto {
+  @Field()
+  @IsNotEmpty({ message: 'Option ID is required.' })
+  @IsString({ message: 'Option ID must be a string.' })
+  id: string;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString({ message: 'Option name must be a string.' })
+  name?: string;
+
+  @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber({}, { message: 'Price delta must be a number.' })
+  priceDelta?: number;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsBoolean({ message: 'Available must be a boolean.' })
+  available?: boolean;
+
+  @Field(() => Int, { nullable: true })
+  @IsOptional()
+  @IsInt({ message: 'Display order must be an integer.' })
+  displayOrder?: number;
+}
+
+@InputType()
+export class DeleteItemOptionDto {
+  @Field()
+  @IsNotEmpty({ message: 'Option ID is required.' })
+  @IsString({ message: 'Option ID must be a string.' })
+  id: string;
+}
+
+@InputType()
+export class GetMenuItemDto {
+  @Field()
+  @IsNotEmpty({ message: 'Menu item ID is required.' })
+  @IsString({ message: 'Menu item ID must be a string.' })
+  menuItemId: string;
 }
 
 // ==================== OPERATING HOURS MANAGEMENT DTOs ====================

@@ -1,7 +1,7 @@
 import { Field, ObjectType } from '@nestjs/graphql';
-import { Restaurant } from '../entities/restaurant.entities';
+import { ItemOption, MenuItem, OptionGroup, Restaurant } from '../entities/restaurant.entities';
 
-export { Restaurant }
+export { ItemOption, MenuItem, OptionGroup, Restaurant }
 
 @ObjectType()
 export class ErrorType {
@@ -172,6 +172,53 @@ export class DeleteMenuItemResponse {
 
   @Field(() => Restaurant)
   restaurant: Restaurant;
+
+  @Field(() => ErrorType, { nullable: true })
+  error?: ErrorType;
+}
+
+// ==================== OPTION GROUP / ITEM OPTION RESPONSES ====================
+
+/**
+ * Option mutations return the affected group rather than the whole restaurant so
+ * the restaurant MFE can patch a single group in place without refetching the
+ * entire menu.
+ */
+@ObjectType()
+export class OptionGroupResponse {
+  @Field()
+  message: string;
+
+  @Field(() => OptionGroup, { nullable: true })
+  optionGroup?: OptionGroup;
+
+  @Field(() => ErrorType, { nullable: true })
+  error?: ErrorType;
+}
+
+@ObjectType()
+export class DeleteOptionGroupResponse {
+  @Field()
+  message: string;
+
+  @Field(() => ErrorType, { nullable: true })
+  error?: ErrorType;
+}
+
+@ObjectType()
+export class DeleteItemOptionResponse {
+  @Field()
+  message: string;
+
+  @Field(() => ErrorType, { nullable: true })
+  error?: ErrorType;
+}
+
+/** Backs the customer app's item detail modal, which needs the option catalogue. */
+@ObjectType()
+export class GetMenuItemResponse {
+  @Field(() => MenuItem, { nullable: true })
+  menuItem?: MenuItem;
 
   @Field(() => ErrorType, { nullable: true })
   error?: ErrorType;

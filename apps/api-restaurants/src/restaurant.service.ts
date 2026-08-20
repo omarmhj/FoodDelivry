@@ -24,12 +24,31 @@ import {
   UpdateOperatingHoursDto,
   DeleteOperatingHoursDto,
   AddStaffMemberDto,
-  RemoveStaffMemberDto
+  RemoveStaffMemberDto,
+  CreateOptionGroupDto,
+  UpdateOptionGroupDto,
+  DeleteOptionGroupDto,
+  CreateItemOptionDto,
+  UpdateItemOptionDto,
+  DeleteItemOptionDto,
+  GetMenuItemDto
 } from './dto/restaurant.dto';
 import * as bcrypt from 'bcrypt';
 import { Response } from 'express';
 import { TokenSender } from './utils/send.token';
 import { LoginResponse } from './types/restaurant.type';
+
+/**
+ * Option groups are always returned in the order the owner arranged them, with
+ * their choices nested, so the customer app can render the customization sheet
+ * without any client-side sorting.
+ */
+const MENU_ITEM_OPTION_GROUPS_INCLUDE = {
+  orderBy: { displayOrder: 'asc' },
+  include: {
+    options: { orderBy: { displayOrder: 'asc' } },
+  },
+} as const;
 
 interface Restaurant {
   name: string;
@@ -183,6 +202,7 @@ export class RestaurantService {
             images: true,
             category: true,
             menu: true,
+            optionGroups: MENU_ITEM_OPTION_GROUPS_INCLUDE,
           },
         },
         operatingHours: true,
@@ -247,6 +267,7 @@ export class RestaurantService {
               images: true,
               category: true,
               menu: true,
+              optionGroups: MENU_ITEM_OPTION_GROUPS_INCLUDE,
             },
           },
           operatingHours: true,
@@ -299,6 +320,7 @@ export class RestaurantService {
             images: true,
             category: true,
             menu: true,
+            optionGroups: MENU_ITEM_OPTION_GROUPS_INCLUDE,
           },
         },
         operatingHours: true,
@@ -387,6 +409,7 @@ export class RestaurantService {
             menuItems: {
               include: {
                 images: true,
+                optionGroups: MENU_ITEM_OPTION_GROUPS_INCLUDE,
               },
             },
             operatingHours: true,
@@ -434,6 +457,7 @@ export class RestaurantService {
             images: true,
             category: true,
             menu: true,
+            optionGroups: MENU_ITEM_OPTION_GROUPS_INCLUDE,
           },
         },
         operatingHours: true,
@@ -477,6 +501,7 @@ export class RestaurantService {
             images: true,
             category: true,
             menu: true,
+            optionGroups: MENU_ITEM_OPTION_GROUPS_INCLUDE,
           },
         },
         operatingHours: true,
@@ -538,6 +563,7 @@ export class RestaurantService {
             images: true,
             category: true,
             menu: true,
+            optionGroups: MENU_ITEM_OPTION_GROUPS_INCLUDE,
           },
         },
         operatingHours: true,
@@ -578,6 +604,7 @@ export class RestaurantService {
             images: true,
             category: true,
             menu: true,
+            optionGroups: MENU_ITEM_OPTION_GROUPS_INCLUDE,
           },
         },
         operatingHours: true,
@@ -621,6 +648,7 @@ export class RestaurantService {
             images: true,
             category: true,
             menu: true,
+            optionGroups: MENU_ITEM_OPTION_GROUPS_INCLUDE,
           },
         },
         operatingHours: true,
@@ -672,6 +700,7 @@ export class RestaurantService {
             images: true,
             category: true,
             menu: true,
+            optionGroups: MENU_ITEM_OPTION_GROUPS_INCLUDE,
           },
         },
         operatingHours: true,
@@ -687,7 +716,7 @@ export class RestaurantService {
   // ==================== MENU ITEM MANAGEMENT ====================
   
   async createMenuItem(createMenuItemDto: CreateMenuItemDto, req: AuthenticatedRequest) {
-    const { name, description, price, estimatedPrice, categoryId, menuId, available, images } = createMenuItemDto;
+    const { name, description, price, estimatedPrice, calories, categoryId, menuId, available, images } = createMenuItemDto;
     const restaurantId = req.restaurant?.id;
 
     if (!restaurantId) {
@@ -724,6 +753,7 @@ export class RestaurantService {
         description,
         price,
         estimatedPrice,
+        calories,
         categoryId,
         menuId,
         restaurantId,
@@ -744,6 +774,7 @@ export class RestaurantService {
             images: true,
             category: true,
             menu: true,
+            optionGroups: MENU_ITEM_OPTION_GROUPS_INCLUDE,
           },
         },
         operatingHours: true,
@@ -757,7 +788,7 @@ export class RestaurantService {
   }
 
   async updateMenuItem(updateMenuItemDto: UpdateMenuItemDto, req: AuthenticatedRequest) {
-    const { id, name, description, price, estimatedPrice, categoryId, menuId, available } = updateMenuItemDto;
+    const { id, name, description, price, estimatedPrice, calories, categoryId, menuId, available } = updateMenuItemDto;
     const restaurantId = req.restaurant?.id;
 
     if (!restaurantId) {
@@ -807,6 +838,7 @@ export class RestaurantService {
         description,
         price,
         estimatedPrice,
+        calories,
         categoryId,
         menuId,
         available,
@@ -823,6 +855,7 @@ export class RestaurantService {
             images: true,
             category: true,
             menu: true,
+            optionGroups: MENU_ITEM_OPTION_GROUPS_INCLUDE,
           },
         },
         operatingHours: true,
@@ -856,6 +889,22 @@ export class RestaurantService {
       where: { foodId: id },
     });
 
+    // MongoDB has no referential cascade, so the option catalogue has to be torn
+    // down explicitly: options first, then the groups that own them.
+    const optionGroups = await this.prisma.optionGroup.findMany({
+      where: { menuItemId: id },
+      select: { id: true },
+    });
+
+    if (optionGroups.length > 0) {
+      await this.prisma.itemOption.deleteMany({
+        where: { optionGroupId: { in: optionGroups.map(group => group.id) } },
+      });
+      await this.prisma.optionGroup.deleteMany({
+        where: { menuItemId: id },
+      });
+    }
+
     // Delete the menu item
     await this.prisma.menuItem.delete({
       where: { id },
@@ -871,6 +920,7 @@ export class RestaurantService {
             images: true,
             category: true,
             menu: true,
+            optionGroups: MENU_ITEM_OPTION_GROUPS_INCLUDE,
           },
         },
         operatingHours: true,
@@ -881,6 +931,263 @@ export class RestaurantService {
       message: 'Menu item deleted successfully',
       restaurant,
     };
+  }
+
+  // ==================== OPTION GROUP / ITEM OPTION MANAGEMENT ====================
+
+  /**
+   * Public read used by the customer app's item detail sheet. Unlike the owner
+   * mutations below it needs no authentication, but it only ever exposes an
+   * available item so a hidden item cannot be reached by guessing its id.
+   */
+  async getMenuItem(getMenuItemDto: GetMenuItemDto) {
+    const menuItem = await this.prisma.menuItem.findUnique({
+      where: { id: getMenuItemDto.menuItemId },
+      include: {
+        images: true,
+        category: true,
+        menu: true,
+        optionGroups: MENU_ITEM_OPTION_GROUPS_INCLUDE,
+      },
+    });
+
+    if (!menuItem) {
+      return { error: { message: 'Menu item not found' } };
+    }
+
+    return { menuItem };
+  }
+
+  async createOptionGroup(dto: CreateOptionGroupDto, req: AuthenticatedRequest) {
+    const restaurantId = this.requireRestaurantId(req);
+    const { menuItemId, name, required, minSelect, maxSelect, displayOrder, options } = dto;
+
+    const menuItem = await this.prisma.menuItem.findFirst({
+      where: { id: menuItemId, restaurantId },
+    });
+
+    if (!menuItem) {
+      throw new BadRequestException('Menu item not found or not owned by restaurant');
+    }
+
+    const resolved = this.resolveSelectionRules({ required, minSelect, maxSelect });
+    const optionCount = options?.length ?? 0;
+
+    if (optionCount > 0 && resolved.maxSelect > optionCount) {
+      throw new BadRequestException(
+        `maxSelect (${resolved.maxSelect}) cannot exceed the number of options in the group (${optionCount})`,
+      );
+    }
+
+    const optionGroup = await this.prisma.optionGroup.create({
+      data: {
+        menuItemId,
+        restaurantId,
+        name,
+        required: resolved.required,
+        minSelect: resolved.minSelect,
+        maxSelect: resolved.maxSelect,
+        displayOrder: displayOrder ?? 0,
+        options: options?.length
+          ? {
+              create: options.map((option, index) => ({
+                restaurantId,
+                name: option.name,
+                priceDelta: option.priceDelta ?? 0,
+                available: option.available ?? true,
+                displayOrder: option.displayOrder ?? index,
+              })),
+            }
+          : undefined,
+      },
+      include: { options: { orderBy: { displayOrder: 'asc' } } },
+    });
+
+    return { message: 'Option group created successfully', optionGroup };
+  }
+
+  async updateOptionGroup(dto: UpdateOptionGroupDto, req: AuthenticatedRequest) {
+    const restaurantId = this.requireRestaurantId(req);
+    const { id, name, required, minSelect, maxSelect, displayOrder } = dto;
+
+    const existing = await this.prisma.optionGroup.findFirst({
+      where: { id, restaurantId },
+      include: { options: true },
+    });
+
+    if (!existing) {
+      throw new BadRequestException('Option group not found or not owned by restaurant');
+    }
+
+    // Selection rules are validated against the merge of the patch and the stored
+    // group, so a partial update cannot leave the group in an unsatisfiable state
+    // (e.g. raising minSelect above an unchanged maxSelect).
+    const resolved = this.resolveSelectionRules({
+      required: required ?? existing.required,
+      minSelect: minSelect ?? existing.minSelect,
+      maxSelect: maxSelect ?? existing.maxSelect,
+    });
+
+    if (existing.options.length > 0 && resolved.maxSelect > existing.options.length) {
+      throw new BadRequestException(
+        `maxSelect (${resolved.maxSelect}) cannot exceed the number of options in the group (${existing.options.length})`,
+      );
+    }
+
+    const optionGroup = await this.prisma.optionGroup.update({
+      where: { id },
+      data: {
+        name,
+        required: resolved.required,
+        minSelect: resolved.minSelect,
+        maxSelect: resolved.maxSelect,
+        displayOrder,
+      },
+      include: { options: { orderBy: { displayOrder: 'asc' } } },
+    });
+
+    return { message: 'Option group updated successfully', optionGroup };
+  }
+
+  async deleteOptionGroup(dto: DeleteOptionGroupDto, req: AuthenticatedRequest) {
+    const restaurantId = this.requireRestaurantId(req);
+
+    const existing = await this.prisma.optionGroup.findFirst({
+      where: { id: dto.id, restaurantId },
+    });
+
+    if (!existing) {
+      throw new BadRequestException('Option group not found or not owned by restaurant');
+    }
+
+    await this.prisma.itemOption.deleteMany({ where: { optionGroupId: dto.id } });
+    await this.prisma.optionGroup.delete({ where: { id: dto.id } });
+
+    return { message: 'Option group deleted successfully' };
+  }
+
+  async createItemOption(dto: CreateItemOptionDto, req: AuthenticatedRequest) {
+    const restaurantId = this.requireRestaurantId(req);
+    const { optionGroupId, name, priceDelta, available, displayOrder } = dto;
+
+    const group = await this.prisma.optionGroup.findFirst({
+      where: { id: optionGroupId, restaurantId },
+      include: { options: { select: { id: true } } },
+    });
+
+    if (!group) {
+      throw new BadRequestException('Option group not found or not owned by restaurant');
+    }
+
+    await this.prisma.itemOption.create({
+      data: {
+        optionGroupId,
+        restaurantId,
+        name,
+        priceDelta: priceDelta ?? 0,
+        available: available ?? true,
+        displayOrder: displayOrder ?? group.options.length,
+      },
+    });
+
+    return {
+      message: 'Option created successfully',
+      optionGroup: await this.findOwnedOptionGroup(optionGroupId, restaurantId),
+    };
+  }
+
+  async updateItemOption(dto: UpdateItemOptionDto, req: AuthenticatedRequest) {
+    const restaurantId = this.requireRestaurantId(req);
+    const { id, name, priceDelta, available, displayOrder } = dto;
+
+    const existing = await this.prisma.itemOption.findFirst({
+      where: { id, restaurantId },
+    });
+
+    if (!existing) {
+      throw new BadRequestException('Option not found or not owned by restaurant');
+    }
+
+    await this.prisma.itemOption.update({
+      where: { id },
+      data: { name, priceDelta, available, displayOrder },
+    });
+
+    return {
+      message: 'Option updated successfully',
+      optionGroup: await this.findOwnedOptionGroup(existing.optionGroupId, restaurantId),
+    };
+  }
+
+  async deleteItemOption(dto: DeleteItemOptionDto, req: AuthenticatedRequest) {
+    const restaurantId = this.requireRestaurantId(req);
+
+    const existing = await this.prisma.itemOption.findFirst({
+      where: { id: dto.id, restaurantId },
+      include: { optionGroup: true },
+    });
+
+    if (!existing) {
+      throw new BadRequestException('Option not found or not owned by restaurant');
+    }
+
+    // Removing an option can leave the group demanding more choices than it
+    // offers, which would make every order for the item fail validation.
+    const remaining = await this.prisma.itemOption.count({
+      where: { optionGroupId: existing.optionGroupId, id: { not: dto.id } },
+    });
+
+    if (existing.optionGroup.required && remaining < existing.optionGroup.minSelect) {
+      throw new BadRequestException(
+        `Cannot delete option: group "${existing.optionGroup.name}" requires at least ${existing.optionGroup.minSelect} selection(s) and would only have ${remaining} option(s) left`,
+      );
+    }
+
+    await this.prisma.itemOption.delete({ where: { id: dto.id } });
+
+    return { message: 'Option deleted successfully' };
+  }
+
+  private requireRestaurantId(req: AuthenticatedRequest): string {
+    const restaurantId = req.restaurant?.id;
+    if (!restaurantId) {
+      throw new BadRequestException('Restaurant not authenticated');
+    }
+    return restaurantId;
+  }
+
+  private async findOwnedOptionGroup(id: string, restaurantId: string) {
+    return this.prisma.optionGroup.findFirst({
+      where: { id, restaurantId },
+      include: { options: { orderBy: { displayOrder: 'asc' } } },
+    });
+  }
+
+  /**
+   * Normalizes the three interdependent selection fields into a consistent set.
+   * A required group must demand at least one choice, and maxSelect can never be
+   * below minSelect — otherwise no selection could ever satisfy the group.
+   */
+  private resolveSelectionRules(input: {
+    required?: boolean;
+    minSelect?: number;
+    maxSelect?: number;
+  }): { required: boolean; minSelect: number; maxSelect: number } {
+    const required = input.required ?? false;
+    const minSelect = input.minSelect ?? (required ? 1 : 0);
+    const maxSelect = input.maxSelect ?? Math.max(1, minSelect);
+
+    if (required && minSelect < 1) {
+      throw new BadRequestException('A required option group must have minSelect of at least 1');
+    }
+
+    if (maxSelect < minSelect) {
+      throw new BadRequestException(
+        `maxSelect (${maxSelect}) cannot be less than minSelect (${minSelect})`,
+      );
+    }
+
+    return { required, minSelect, maxSelect };
   }
 
   // ==================== OPERATING HOURS MANAGEMENT ====================
@@ -913,6 +1220,7 @@ export class RestaurantService {
             images: true,
             category: true,
             menu: true,
+            optionGroups: MENU_ITEM_OPTION_GROUPS_INCLUDE,
           },
         },
         operatingHours: true,
@@ -961,6 +1269,7 @@ export class RestaurantService {
             images: true,
             category: true,
             menu: true,
+            optionGroups: MENU_ITEM_OPTION_GROUPS_INCLUDE,
           },
         },
         operatingHours: true,
@@ -1003,6 +1312,7 @@ export class RestaurantService {
             images: true,
             category: true,
             menu: true,
+            optionGroups: MENU_ITEM_OPTION_GROUPS_INCLUDE,
           },
         },
         operatingHours: true,
@@ -1045,7 +1355,14 @@ export class RestaurantService {
       include: {
         menus: true,
         categories: true,
-        menuItems: { include: { images: true, category: true, menu: true } },
+        menuItems: {
+          include: {
+            images: true,
+            category: true,
+            menu: true,
+            optionGroups: MENU_ITEM_OPTION_GROUPS_INCLUDE,
+          },
+        },
         operatingHours: true,
         staffMembers: true,
       },
@@ -1082,7 +1399,14 @@ export class RestaurantService {
       include: {
         menus: true,
         categories: true,
-        menuItems: { include: { images: true, category: true, menu: true } },
+        menuItems: {
+          include: {
+            images: true,
+            category: true,
+            menu: true,
+            optionGroups: MENU_ITEM_OPTION_GROUPS_INCLUDE,
+          },
+        },
         operatingHours: true,
         staffMembers: true,
       },
@@ -1110,6 +1434,7 @@ export class RestaurantService {
         };
       }
 
+      const coords = restaurant.coordinates?.coordinates;
       const response = {
         isValid: true,
         restaurant: {
@@ -1117,6 +1442,8 @@ export class RestaurantService {
           name: restaurant.name,
           email: restaurant.email,
           address: restaurant.address,
+          longitude: Array.isArray(coords) ? coords[0] : undefined,
+          latitude: Array.isArray(coords) ? coords[1] : undefined,
         },
       };
       return response;
@@ -1129,63 +1456,236 @@ export class RestaurantService {
     }
   }
 
-  // Validate menu items for Orders Service (RabbitMQ handler)
-  async validateMenuItems(data: { restaurantId: string; items: Array<{ menuItemId: string; quantity: number }> }) {
-    this.logger.log(`🔍 Validating menu items for restaurant: ${data.restaurantId}`);
-    
+  /**
+   * Prices and validates a cart for the Orders Service (RabbitMQ handler).
+   *
+   * This is the single authority on what a line costs. The caller sends only
+   * identifiers and quantities — never money — and gets back the priced lines it
+   * must persist. Every price is read from this service's own catalogue, so a
+   * client that tampers with prices in its request cannot influence the total.
+   *
+   * A line is rejected unless the item belongs to this restaurant and is
+   * available, and unless the chosen options exist on that item, are available,
+   * and satisfy each group's required / minSelect / maxSelect rules.
+   */
+  async validateMenuItems(data: {
+    restaurantId: string;
+    items: Array<{ menuItemId: string; quantity: number; selectedOptionIds?: string[] }>;
+  }) {
+    this.logger.log(`🔍 Pricing and validating menu items for restaurant: ${data.restaurantId}`);
+
     try {
+      if (!data?.restaurantId) {
+        return { isValid: false, error: 'Restaurant ID is required', items: [], subtotal: 0 };
+      }
+
+      if (!Array.isArray(data.items) || data.items.length === 0) {
+        return { isValid: false, error: 'Order must contain at least one item', items: [], subtotal: 0 };
+      }
+
       const restaurant = await this.prisma.restaurant.findUnique({
         where: { id: data.restaurantId },
-        include: {
-          menuItems: true,
-        },
+        select: { id: true },
       });
 
       if (!restaurant) {
-        return {
-          isValid: false,
-          error: 'Restaurant not found',
-        };
+        return { isValid: false, error: 'Restaurant not found', items: [], subtotal: 0 };
       }
 
-      const validItems = [];
-      const errors = [];
+      // Fetch the whole catalogue slice for the requested items in one query so
+      // pricing does not issue a database round trip per line.
+      const menuItems = await this.prisma.menuItem.findMany({
+        where: {
+          id: { in: data.items.map(item => item.menuItemId) },
+          restaurantId: data.restaurantId,
+        },
+        include: {
+          images: { take: 1 },
+          optionGroups: { include: { options: true } },
+        },
+      });
+
+      const menuItemsById = new Map(menuItems.map(menuItem => [menuItem.id, menuItem]));
+      const errors: string[] = [];
+      const pricedItems: Array<{
+        menuItemId: string;
+        menuItemName: string;
+        menuItemDescription: string;
+        menuItemImage?: string;
+        quantity: number;
+        basePrice: number;
+        optionsTotal: number;
+        unitPrice: number;
+        totalPrice: number;
+        selectedOptions: Array<{
+          optionId: string;
+          optionGroupId: string;
+          groupName: string;
+          name: string;
+          priceDelta: number;
+        }>;
+      }> = [];
 
       for (const item of data.items) {
-        const menuItem = restaurant.menuItems.find(mi => mi.id === item.menuItemId);
-        
+        const menuItem = menuItemsById.get(item.menuItemId);
+
         if (!menuItem) {
-          errors.push(`Menu item ${item.menuItemId} not found`);
+          errors.push(`Menu item ${item.menuItemId} not found for this restaurant`);
           continue;
         }
 
-        if (item.quantity <= 0) {
-          errors.push(`Invalid quantity for menu item ${menuItem.name}`);
+        if (!menuItem.available) {
+          errors.push(`${menuItem.name} is currently unavailable`);
           continue;
         }
 
-        validItems.push(menuItem);
+        if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 99) {
+          errors.push(`Invalid quantity for ${menuItem.name}: must be a whole number between 1 and 99`);
+          continue;
+        }
+
+        const selection = this.priceSelectedOptions(menuItem, item.selectedOptionIds ?? []);
+
+        if (selection.errors.length > 0) {
+          errors.push(...selection.errors);
+          continue;
+        }
+
+        const unitPrice = this.roundMoney(menuItem.price + selection.optionsTotal);
+
+        pricedItems.push({
+          menuItemId: menuItem.id,
+          menuItemName: menuItem.name,
+          menuItemDescription: menuItem.description,
+          menuItemImage: menuItem.images[0]?.url,
+          quantity: item.quantity,
+          basePrice: menuItem.price,
+          optionsTotal: selection.optionsTotal,
+          unitPrice,
+          totalPrice: this.roundMoney(unitPrice * item.quantity),
+          selectedOptions: selection.selectedOptions,
+        });
       }
 
       if (errors.length > 0) {
-        return {
-          isValid: false,
-          error: errors.join(', '),
-          validItems: [],
-        };
+        this.logger.warn(`⚠️ Menu item validation rejected an order: ${errors.join('; ')}`);
+        return { isValid: false, error: errors.join('; '), items: [], subtotal: 0 };
       }
 
-      return {
-        isValid: true,
-        validItems,
-      };
+      const subtotal = this.roundMoney(
+        pricedItems.reduce((sum, item) => sum + item.totalPrice, 0),
+      );
+
+      return { isValid: true, items: pricedItems, subtotal };
     } catch (error) {
       this.logger.error(`❌ Menu items validation failed: ${error.message}`);
-      return {
-        isValid: false,
-        error: 'Validation failed',
-        validItems: [],
-      };
+      return { isValid: false, error: 'Validation failed', items: [], subtotal: 0 };
     }
+  }
+
+  /**
+   * Resolves the chosen option ids against a menu item's own option groups and
+   * sums their price deltas. Returns the accumulated errors instead of throwing
+   * so the caller can report every problem with a cart at once.
+   */
+  private priceSelectedOptions(
+    menuItem: {
+      name: string;
+      optionGroups: Array<{
+        id: string;
+        name: string;
+        required: boolean;
+        minSelect: number;
+        maxSelect: number;
+        options: Array<{ id: string; name: string; priceDelta: number; available: boolean }>;
+      }>;
+    },
+    selectedOptionIds: string[],
+  ) {
+    const errors: string[] = [];
+    const selectedOptions: Array<{
+      optionId: string;
+      optionGroupId: string;
+      groupName: string;
+      name: string;
+      priceDelta: number;
+    }> = [];
+
+    const uniqueIds = [...new Set(selectedOptionIds)];
+    if (uniqueIds.length !== selectedOptionIds.length) {
+      errors.push(`Duplicate options selected for ${menuItem.name}`);
+    }
+
+    // Index every option this item actually offers, so an id belonging to a
+    // different item (or a fabricated one) cannot be priced.
+    const optionIndex = new Map(
+      menuItem.optionGroups.flatMap(group =>
+        group.options.map(option => [option.id, { group, option }] as const),
+      ),
+    );
+
+    const selectionsPerGroup = new Map<string, number>();
+
+    for (const optionId of uniqueIds) {
+      const match = optionIndex.get(optionId);
+
+      if (!match) {
+        errors.push(`Option ${optionId} is not available for ${menuItem.name}`);
+        continue;
+      }
+
+      if (!match.option.available) {
+        errors.push(`Option "${match.option.name}" for ${menuItem.name} is currently unavailable`);
+        continue;
+      }
+
+      selectionsPerGroup.set(match.group.id, (selectionsPerGroup.get(match.group.id) ?? 0) + 1);
+      selectedOptions.push({
+        optionId: match.option.id,
+        optionGroupId: match.group.id,
+        groupName: match.group.name,
+        name: match.option.name,
+        priceDelta: match.option.priceDelta,
+      });
+    }
+
+    for (const group of menuItem.optionGroups) {
+      const count = selectionsPerGroup.get(group.id) ?? 0;
+
+      if (group.required && count < group.minSelect) {
+        errors.push(
+          `${menuItem.name}: "${group.name}" requires at least ${group.minSelect} selection(s), got ${count}`,
+        );
+        continue;
+      }
+
+      // A group that is not required may be skipped entirely, but once the
+      // customer picks anything from it the minimum applies.
+      if (!group.required && count > 0 && count < group.minSelect) {
+        errors.push(
+          `${menuItem.name}: "${group.name}" requires at least ${group.minSelect} selection(s) once used, got ${count}`,
+        );
+        continue;
+      }
+
+      if (count > group.maxSelect) {
+        errors.push(
+          `${menuItem.name}: "${group.name}" allows at most ${group.maxSelect} selection(s), got ${count}`,
+        );
+      }
+    }
+
+    return {
+      errors,
+      selectedOptions,
+      optionsTotal: this.roundMoney(
+        selectedOptions.reduce((sum, option) => sum + option.priceDelta, 0),
+      ),
+    };
+  }
+
+  /** Keeps derived money values at two decimals so floating point drift never reaches a total. */
+  private roundMoney(value: number): number {
+    return Math.round(value * 100) / 100;
   }
 }

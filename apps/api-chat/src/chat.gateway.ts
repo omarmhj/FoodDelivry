@@ -26,7 +26,19 @@ interface AuthedSocket extends Socket {
 
 @WebSocketGateway({
   cors: {
-    origin: '*',
+    origin: process.env.CORS_ORIGINS
+      ? process.env.CORS_ORIGINS.split(',').map((s) => s.trim())
+      : [
+          'http://localhost:3000',
+          'http://localhost:3001',
+          'http://localhost:4000',
+          'http://localhost:5173', // customer app (Vite)
+          'http://localhost:5174', // restaurant dashboard (Vite)
+          'http://localhost:5175', // delivery app (Vite)
+          'http://127.0.0.1:5173',
+          'http://localhost:4173', // vite preview
+          'https://studio.apollographql.com',
+        ],
     credentials: true,
   },
 })

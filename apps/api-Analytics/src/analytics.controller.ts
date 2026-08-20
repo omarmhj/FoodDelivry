@@ -88,6 +88,26 @@ export class AnalyticsController {
   /**
    * Listen to order.reviewed event
    */
+  @EventPattern('order.rejected')
+  async handleOrderRejected(@Payload() data: any, @Ctx() context: RmqContext) {
+    const channel = context.getChannelRef();
+    const originalMsg = context.getMessage();
+    const timestamp = new Date().toISOString();
+
+    this.logger.log(`🚫 [${timestamp}] Received order.rejected event`);
+    this.logger.log(`🚫 Order Number: ${data.orderNumber || 'N/A'}`);
+
+    try {
+      await this.analyticsService.handleOrderRejected(data);
+      this.logger.log(`✅ Successfully processed order.rejected event for: ${data.orderNumber}`);
+      channel.ack(originalMsg);
+    } catch (error) {
+      this.logger.error(`❌ Error handling order.rejected event:`, error.message);
+      this.logger.error(`❌ Error stack:`, error.stack);
+      channel.ack(originalMsg);
+    }
+  }
+
   @EventPattern('order.reviewed')
   async handleOrderReviewed(@Payload() data: any, @Ctx() context: RmqContext) {
     const channel = context.getChannelRef();

@@ -103,6 +103,28 @@ export class NotificationsController {
     channel.ack(originalMsg);
   }
 
+  @EventPattern('order.rejected')
+  async handleOrderRejected(@Payload() data: any, @Ctx() context: RmqContext) {
+    const channel = context.getChannelRef();
+    const originalMsg = context.getMessage();
+    const timestamp = new Date().toISOString();
+
+    this.logger.log(`🚫 [${timestamp}] Received order.rejected event`);
+    this.logger.log(`🚫 Order Number: ${data.orderNumber || 'N/A'}`);
+
+    try {
+      await this.notificationsService.handleOrderStatusUpdated({
+        ...data,
+        status: 'REJECTED',
+        customerEmail: data.metadata?.customerEmail,
+      });
+      this.logger.log(`✅ Processed order.rejected event for order: ${data.orderNumber}`);
+    } catch (error) {
+      this.logger.error(`❌ Error handling order.rejected:`, error.message);
+    }
+    channel.ack(originalMsg);
+  }
+
   // ==================== RESERVATION EVENTS ====================
 
   @EventPattern('reservation.created')

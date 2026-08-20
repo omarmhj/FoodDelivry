@@ -24,6 +24,10 @@ async function bootstrap() {
         },
         prefetchCount: 100,
         noAck: false,
+        socketOptions: {
+          heartbeatIntervalInSeconds: 60,
+          reconnectTimeInSeconds: 5,
+        },
       },
     },
   );

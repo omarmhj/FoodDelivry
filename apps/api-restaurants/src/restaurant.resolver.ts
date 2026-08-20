@@ -20,6 +20,10 @@ import {
   DeleteOperatingHoursResponse,
   AddStaffMemberResponse,
   RemoveStaffMemberResponse,
+  OptionGroupResponse,
+  DeleteOptionGroupResponse,
+  DeleteItemOptionResponse,
+  GetMenuItemResponse,
 } from "./types/restaurant.type";
 import { 
   ActivationDto, 
@@ -39,7 +43,14 @@ import {
   UpdateOperatingHoursDto,
   DeleteOperatingHoursDto,
   AddStaffMemberDto,
-  RemoveStaffMemberDto
+  RemoveStaffMemberDto,
+  CreateOptionGroupDto,
+  UpdateOptionGroupDto,
+  DeleteOptionGroupDto,
+  CreateItemOptionDto,
+  UpdateItemOptionDto,
+  DeleteItemOptionDto,
+  GetMenuItemDto
 } from "./dto/restaurant.dto";
 import { Response, Request } from "express";
 import { UseGuards } from "@nestjs/common";
@@ -202,6 +213,75 @@ export class RestaurantResolver {
   ): Promise<DeleteMenuItemResponse> {
     console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | 🗑️ Handling DELETE MENU ITEM request');
     return await this.restaurantService.deleteMenuItem(deleteMenuItemDto, context.req as any);
+  }
+
+  // ==================== OPTION GROUP / ITEM OPTION RESOLVERS ====================
+
+  @Query(() => GetMenuItemResponse)
+  async getMenuItem(
+    @Args('getMenuItemDto') getMenuItemDto: GetMenuItemDto
+  ): Promise<GetMenuItemResponse> {
+    return await this.restaurantService.getMenuItem(getMenuItemDto) as GetMenuItemResponse;
+  }
+
+  @Mutation(() => OptionGroupResponse)
+  @UseGuards(AuthGuard)
+  async createOptionGroup(
+    @Args('createOptionGroupDto') createOptionGroupDto: CreateOptionGroupDto,
+    @Context() context: GraphQLContext
+  ): Promise<OptionGroupResponse> {
+    console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | 🧩 Handling CREATE OPTION GROUP request');
+    return await this.restaurantService.createOptionGroup(createOptionGroupDto, context.req as any);
+  }
+
+  @Mutation(() => OptionGroupResponse)
+  @UseGuards(AuthGuard)
+  async updateOptionGroup(
+    @Args('updateOptionGroupDto') updateOptionGroupDto: UpdateOptionGroupDto,
+    @Context() context: GraphQLContext
+  ): Promise<OptionGroupResponse> {
+    console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | ✏️ Handling UPDATE OPTION GROUP request');
+    return await this.restaurantService.updateOptionGroup(updateOptionGroupDto, context.req as any);
+  }
+
+  @Mutation(() => DeleteOptionGroupResponse)
+  @UseGuards(AuthGuard)
+  async deleteOptionGroup(
+    @Args('deleteOptionGroupDto') deleteOptionGroupDto: DeleteOptionGroupDto,
+    @Context() context: GraphQLContext
+  ): Promise<DeleteOptionGroupResponse> {
+    console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | 🗑️ Handling DELETE OPTION GROUP request');
+    return await this.restaurantService.deleteOptionGroup(deleteOptionGroupDto, context.req as any);
+  }
+
+  @Mutation(() => OptionGroupResponse)
+  @UseGuards(AuthGuard)
+  async createItemOption(
+    @Args('createItemOptionDto') createItemOptionDto: CreateItemOptionDto,
+    @Context() context: GraphQLContext
+  ): Promise<OptionGroupResponse> {
+    console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | ➕ Handling CREATE ITEM OPTION request');
+    return await this.restaurantService.createItemOption(createItemOptionDto, context.req as any) as OptionGroupResponse;
+  }
+
+  @Mutation(() => OptionGroupResponse)
+  @UseGuards(AuthGuard)
+  async updateItemOption(
+    @Args('updateItemOptionDto') updateItemOptionDto: UpdateItemOptionDto,
+    @Context() context: GraphQLContext
+  ): Promise<OptionGroupResponse> {
+    console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | ✏️ Handling UPDATE ITEM OPTION request');
+    return await this.restaurantService.updateItemOption(updateItemOptionDto, context.req as any) as OptionGroupResponse;
+  }
+
+  @Mutation(() => DeleteItemOptionResponse)
+  @UseGuards(AuthGuard)
+  async deleteItemOption(
+    @Args('deleteItemOptionDto') deleteItemOptionDto: DeleteItemOptionDto,
+    @Context() context: GraphQLContext
+  ): Promise<DeleteItemOptionResponse> {
+    console.log('\x1b[33m🍕 RESTAURANT SERVICE\x1b[0m | 🗑️ Handling DELETE ITEM OPTION request');
+    return await this.restaurantService.deleteItemOption(deleteItemOptionDto, context.req as any);
   }
 
   // ==================== OPERATING HOURS MANAGEMENT RESOLVERS ====================

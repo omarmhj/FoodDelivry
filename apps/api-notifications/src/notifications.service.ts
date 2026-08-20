@@ -457,6 +457,7 @@ export class NotificationsService {
       OUT_FOR_DELIVERY: 'Out for Delivery',
       DELIVERED: 'Delivered',
       CANCELLED: 'Cancelled',
+      REJECTED: 'Declined by the restaurant',
     };
     return labels[status] || status;
   }
@@ -465,7 +466,7 @@ export class NotificationsService {
    * Check if status change requires email notification
    */
   private isImportantStatus(status: string): boolean {
-    return ['CONFIRMED', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'].includes(status);
+    return ['CONFIRMED', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'REJECTED'].includes(status);
   }
 
   /**

@@ -1,4 +1,4 @@
-import { Field, ObjectType } from '@nestjs/graphql';
+import { Field, Float, Int, ObjectType } from '@nestjs/graphql';
 import { Category, Menu } from '../../entities/restaurant.entities';
 
 @ObjectType()
@@ -11,6 +11,54 @@ export class Image {
 
   @Field()
   url: string;
+}
+
+@ObjectType()
+export class ItemOption {
+  @Field()
+  id: string;
+
+  @Field()
+  optionGroupId: string;
+
+  @Field()
+  name: string;
+
+  @Field(() => Float)
+  priceDelta: number;
+
+  @Field()
+  available: boolean;
+
+  @Field(() => Int)
+  displayOrder: number;
+}
+
+@ObjectType()
+export class OptionGroup {
+  @Field()
+  id: string;
+
+  @Field()
+  menuItemId: string;
+
+  @Field()
+  name: string;
+
+  @Field()
+  required: boolean;
+
+  @Field(() => Int)
+  minSelect: number;
+
+  @Field(() => Int)
+  maxSelect: number;
+
+  @Field(() => Int)
+  displayOrder: number;
+
+  @Field(() => [ItemOption])
+  options: ItemOption[];
 }
 
 @ObjectType()
@@ -30,6 +78,9 @@ export class MenuItem {
   @Field({ nullable: true })
   estimatedPrice?: number;
 
+  @Field(() => Int, { nullable: true })
+  calories?: number;
+
   @Field()
   available: boolean;
 
@@ -47,6 +98,9 @@ export class MenuItem {
 
   @Field(() => [Image], { nullable: true })
   images?: Image[];
+
+  @Field(() => [OptionGroup], { nullable: true })
+  optionGroups?: OptionGroup[];
 
   @Field()
   restaurantId: string;

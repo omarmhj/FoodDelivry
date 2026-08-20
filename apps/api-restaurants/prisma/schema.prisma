@@ -59,22 +59,64 @@ model Menu {
 }
 
 model MenuItem {
-  id             String     @id @default(auto()) @map("_id") @db.ObjectId
+  id             String        @id @default(auto()) @map("_id") @db.ObjectId
   name           String
   description    String
   price          Float
   estimatedPrice Float?
-  available      Boolean    @default(true)
-  categoryId     String?    @db.ObjectId
-  category       Category?  @relation(fields: [categoryId], references: [id])
-  menuId         String?    @db.ObjectId
-  menu           Menu?      @relation(fields: [menuId], references: [id])
+  calories       Int?
+  available      Boolean       @default(true)
+  categoryId     String?       @db.ObjectId
+  category       Category?     @relation(fields: [categoryId], references: [id])
+  menuId         String?       @db.ObjectId
+  menu           Menu?         @relation(fields: [menuId], references: [id])
   images         Images[]
-  restaurantId   String     @db.ObjectId
-  restaurant     Restaurant @relation(fields: [restaurantId], references: [id])
+  optionGroups   OptionGroup[]
+  restaurantId   String        @db.ObjectId
+  restaurant     Restaurant    @relation(fields: [restaurantId], references: [id])
   reviews        Reviews[]
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+// A set of choices attached to a menu item, e.g. "Choose your sauce".
+// `required` + `minSelect`/`maxSelect` express the selection rules the customer
+// app enforces before enabling "Add to cart", and that the server re-checks in
+// `validateMenuItems` so the rules cannot be bypassed by a crafted request.
+model OptionGroup {
+  id           String       @id @default(auto()) @map("_id") @db.ObjectId
+  menuItemId   String       @db.ObjectId
+  menuItem     MenuItem     @relation(fields: [menuItemId], references: [id])
+  restaurantId String       @db.ObjectId
+  name         String
+  required     Boolean      @default(false)
+  minSelect    Int          @default(0)
+  maxSelect    Int          @default(1)
+  displayOrder Int          @default(0)
+  options      ItemOption[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([menuItemId])
+  @@index([restaurantId])
+}
+
+// One selectable choice within an OptionGroup. `priceDelta` is added to the
+// item's base price when selected, and may be 0 for free options.
+model ItemOption {
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  optionGroupId String      @db.ObjectId
+  optionGroup   OptionGroup @relation(fields: [optionGroupId], references: [id])
+  restaurantId  String      @db.ObjectId
+  name          String
+  priceDelta    Float       @default(0)
+  available     Boolean     @default(true)
+  displayOrder  Int         @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([optionGroupId])
+  @@index([restaurantId])
 }
 
 model OperatingHours {

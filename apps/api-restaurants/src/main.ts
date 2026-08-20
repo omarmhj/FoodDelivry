@@ -23,6 +23,10 @@ async function bootstrap() {
       queueOptions: {
         durable: true,
       },
+      socketOptions: {
+        heartbeatIntervalInSeconds: 60,
+        reconnectTimeInSeconds: 5,
+      },
     },
   });
 
@@ -33,14 +37,36 @@ async function bootstrap() {
   );
   app.setViewEngine("ejs");
 
+  const corsOrigins = process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',').map((s) => s.trim())
+    : [
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'http://localhost:4000',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'http://localhost:5174',
+        'http://127.0.0.1:5174',
+        'http://localhost:4173',
+        'https://studio.apollographql.com',
+      ];
+
   app.enableCors({
-    origin: [
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'http://localhost:4000',
-      'https://studio.apollographql.com',
-    ],
+    origin: corsOrigins,
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'Accept',
+      'Origin',
+      'accesstoken',
+      'refreshtoken',
+      'access-token',
+      'refresh-token',
+    ],
+    exposedHeaders: ['accesstoken', 'refreshtoken', 'access-token', 'refresh-token'],
   });
 
   // Start all microservices and wait for connection
