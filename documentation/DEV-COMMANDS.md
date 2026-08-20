@@ -72,6 +72,8 @@ open http://localhost:4001/graphql   # api-restaurants
 open http://localhost:4002/graphql   # api-orders
 open http://localhost:4003/graphql   # api-Analytics
 open http://localhost:4004/graphql   # api-reservations
+open http://localhost:4005/graphql   # api-search
+open http://localhost:4006/graphql   # api-chat (also ws://localhost:4006)
 ```
 
 ---
@@ -88,6 +90,8 @@ npx nx serve api-orders         # http://localhost:4002/graphql
 npx nx serve api-reservations   # http://localhost:4004/graphql
 npx nx serve api-notifications  # microservice only, no HTTP port
 npx nx serve api-Analytics      # http://localhost:4003/graphql
+npx nx serve api-search         # http://localhost:4005/graphql
+npx nx serve api-chat           # http://localhost:4006/graphql + ws://localhost:4006
 ```
 
 Recommended startup order (matches dependency chain — users/restaurants must be up
@@ -353,7 +357,10 @@ All should return healthy responses (`PONG` for Redis, `{ ok: 1 }` for Mongo, a 
 | api-orders | 4002 | HTTP/GraphQL |
 | api-Analytics | 4003 | HTTP/GraphQL |
 | api-reservations | 4004 | HTTP/GraphQL |
+| api-search | 4005 | HTTP/GraphQL |
+| api-chat | 4006 | HTTP/GraphQL + WebSocket (ws://localhost:4006) |
 | api-notifications | — | RabbitMQ consumer only, no HTTP |
+| customer-app (frontend) | 5173 | Vite dev server (React) |
 | MongoDB | 27019 | Database |
 | Redis | 6380 | Cache |
 | RabbitMQ (AMQP) | 5673 | Broker |

@@ -1,6 +1,6 @@
 # SnackRapido - Project Status & Context
 
-> **Last Updated:** July 24, 2026
+> **Last Updated:** August 10, 2026
 > **Branch:** Snack-31
 > **Purpose:** This file preserves full project context so any new chat session can continue building without losing context.
 
@@ -14,14 +14,14 @@
 
 | Service | Port | Database | Role |
 |---------|------|----------|------|
-| api-users | 4000 | snackrapido_users | Auth, user management, JWT tokens |
+| api-users | 3000 | snackrapido_users | Auth, user management, JWT tokens |
 | api-restaurants | 4001 | snackrapido_restaurants | Restaurant/menu CRUD, staff roles |
 | api-orders | 4002 | snackrapido_orders | Order lifecycle, status tracking |
 | api-Analytics | 4003 | snackrapido_analytics | Event consumption, daily reports |
 | api-reservations | 4004 | snackrapido_reservations | Table booking, availability |
 | api-search | 4005 | reads snackrapido_restaurants + snackrapido_orders | Full-text + geospatial search, recommendations |
+| api-chat | 4006 | snackrapido_chat | Real-time messaging (GraphQL + WebSocket) |
 | api-notifications | (no HTTP) | snackrapido_notifications | RabbitMQ consumer only, email/SMS/push |
-| client | 3000 | - | Next.js frontend (not yet active) |
 
 ### Infrastructure (Docker Compose)
 
@@ -42,8 +42,8 @@
 | Queue | Producers | Consumers | Purpose |
 |-------|-----------|-----------|---------|
 | `snackrapido_queue` | All services | api-users, api-restaurants | Request/reply (validate user, validate restaurant, validate menu items) |
-| `notifications_queue` | api-orders, api-reservations | api-notifications | Event fan-out for notifications |
-| `analytics_queue` | api-orders, api-reservations | api-Analytics | Event fan-out for analytics |
+| `notifications_queue` | api-orders, api-reservations, api-chat | api-notifications | Event fan-out for notifications |
+| `analytics_queue` | api-orders, api-reservations, api-chat | api-Analytics | Event fan-out for analytics |
 
 ### Event Patterns
 
@@ -59,6 +59,7 @@
 | `reservation.completed` | api-reservations | notifications, analytics |
 | `reservation.cancelled` | api-reservations | notifications, analytics |
 | `reservation.no_show` | api-reservations | notifications, analytics |
+| `message.sent` | api-chat | notifications (notifies offline recipients), analytics (ack + log only) |
 
 ### Request/Reply Patterns (via `snackrapido_queue`)
 
@@ -84,6 +85,12 @@
 | `search:menuitems:<query>:<maxPrice>:<limit>:<skip>` | 5min | api-search |
 | `search:nearby:<lng>:<lat>:<km>:<limit>` | 2min | api-search |
 | `search:recommendations:<customerId>:<limit>` | 10min | api-search |
+
+### Redis Pub/Sub Channels
+
+| Channel | Publisher | Subscriber | Purpose |
+|---------|-----------|------------|---------|
+| `chat:broadcast` | api-chat (`ChatService.persistMessage`) | api-chat (`ChatGateway.afterInit`) | Fan out chat messages to sockets on every instance, so delivery works the same whether sender and recipient are on the same process or not |
 
 ---
 
@@ -111,6 +118,31 @@ Uses `lastValueFrom(client.emit(...))` to subscribe to the Observable (required 
 - Restaurant auth: restaurants log in with email/password, get their own JWT with `restaurantId` in payload
 - Guards: Each service has its own `AuthGuard` that validates JWT and optionally refreshes tokens
 
+### Silent token rotation
+
+When an access token has expired but the refresh token is still valid, the guard
+does not reject the request. It mints a new pair, serves the request, and — in
+`api-orders` only — returns the new pair as `accesstoken` / `refreshtoken`
+**response headers**. Clients must read those headers back or they keep replaying
+a stale token. The Postman collections do this in a collection-level test script.
+
+Two things to know about this path:
+
+- **The rotated access token is issued with a 15m TTL**, while `Login` issues 7
+  days. Rotation is therefore almost unreachable in dev, which is how the bug
+  below survived unnoticed.
+- **`api-users` and `api-restaurants` rotate but never send the headers**, so a
+  client talking to 3000 or 4001 never learns about it and the guard re-mints on
+  every single request. Harmless, but wasteful and inconsistent.
+
+`api-orders` cannot reload the account locally the way the other two services do
+(it owns no accounts collection), so it asks the owning service over RabbitMQ —
+`user.validate` first, then `restaurant.validate`, since restaurant tokens use the
+same shared secret and flow through the same guard. An id neither service claims
+gets no token: the rotation fails closed.
+
+Regression check: `node scripts/verify-token-rotation.js` (needs 3000, 4001, 4002 up).
+
 ---
 
 ## Prisma Configuration
@@ -123,6 +155,7 @@ Each service has its own schema at `apps/<service>/prisma/schema.prisma` with a 
 - `../../node_modules/.prisma/notifications-client`
 - `../../node_modules/.prisma/analytics-client`
 - `../../node_modules/.prisma/search-client` (read model → snackrapido_restaurants; api-search also reuses orders-client for the orders DB)
+- `../../node_modules/.prisma/chat-client`
 
 **Important:** When running Prisma commands, always pass `DATABASE_URL` as env var:
 ```bash
@@ -200,12 +233,24 @@ DATABASE_URL="mongodb://localhost:27019/snackrapido_<service>?replicaSet=rs0&dir
 
 **Key files:** `apps/api-search/src/{main,search.module,search.resolver,search.service}.ts`, `apps/api-search/src/dto/search.dto.ts`, `apps/api-search/src/entities/search.entities.ts`, `apps/api-search/src/guards/auth.guard.ts`, `apps/api-search/prisma/{schema.prisma,prisma.service.ts,orders-prisma.service.ts}`
 
-### ⬜ Phase 8: Chat Service — NOT STARTED
-- Create api-chat microservice
-- WebSocket gateway (@nestjs/websockets)
-- Redis pub/sub for message broadcasting
-- MongoDB message history
-- RabbitMQ events for offline notifications
+### ✅ Phase 8: Chat Service — COMPLETE
+- `api-chat` on port **4006**, hybrid HTTP/GraphQL + Socket.IO WebSocket (`ws://localhost:4006`), no RabbitMQ consumer (producer only)
+- **GraphQL API** (Apollo Federation v2, all three protected by `AuthGuard`):
+  - `createConversation(input)` mutation — idempotent: reuses an existing conversation with the same participant set and same `restaurantId`/`orderId` context instead of creating a duplicate; auto-adds the requester to `participants` if missing
+  - `myConversations` query — conversations where the caller is a participant, ordered by `lastMessageAt` desc
+  - `conversationMessages(input)` query — paginated (`limit` 1–100 default 50, `skip`), returned in chronological order with a `total` count
+- **WebSocket events** (`ChatGateway`):
+  - Connection is authenticated at handshake time — JWT read from `handshake.auth.token`, `?token=` query param, or the `accesstoken` header; invalid/missing token emits `error` and disconnects. Each client auto-joins a personal room `user:<id>`
+  - Client → server: `joinConversation`, `leaveConversation`, `sendMessage`, `markRead`, `typing`
+  - Server → client: `connected`, `message`, `read`, `typing`, `error`
+- **Redis pub/sub broadcasting**: `sendMessage` never emits directly from the gateway. It persists, then publishes to the `chat:broadcast` channel; the gateway's own Redis subscriber emits `message` to the room. This keeps the delivery path identical for single- and multi-instance deployments
+- **MongoDB history**: `snackrapido_chat` DB with `Conversation` (participants, optional restaurantId/orderId context, lastMessage preview) and `Message` (senderId, senderName, content, `readBy[]`) — indexed on conversationId, senderId, createdAt
+- **Read receipts**: `markRead` adds the caller to `readBy` for all unread messages and broadcasts a `read` event to the rest of the room
+- **RabbitMQ**: emits `message.sent` with the recipient list (participants minus sender). `api-notifications` consumes it and creates a `CHAT_MESSAGE` notification plus a mock push per recipient; `api-Analytics` acks and logs it without aggregating
+- **Authorization**: every conversation-scoped operation (join, send, mark read, read messages) goes through `ChatService.isParticipant()` first
+- Typing indicators are ephemeral — broadcast to the room but never persisted
+
+**Key files:** `apps/api-chat/src/{main,chat.module,chat.gateway,chat.resolver,chat.service}.ts`, `apps/api-chat/src/dto/chat.dto.ts`, `apps/api-chat/src/entities/chat.entities.ts`, `apps/api-chat/src/guards/auth.guard.ts`, `apps/api-chat/prisma/{schema.prisma,prisma.service.ts}`
 
 ---
 
@@ -231,9 +276,11 @@ Exception: api-notifications is a pure microservice (`NestFactory.createMicroser
 - `sendAndWait()` has retry logic with exponential backoff for "handler not found" errors
 
 ### Testing in Postman
-- Auth: Send login mutation to api-users (port 4000), get `accessToken` from response
+- Auth: Send login mutation to api-users (port 3000), get `accessToken` from response
 - Use header `accesstoken: <token>` (all lowercase) for authenticated requests
 - Restaurant auth: Login as restaurant via restaurant login mutation, use restaurant token for restaurant-specific operations
+- Collections live in `postman/` — one per service (users, restaurants, orders, reservations, search, notifications). The notifications collection is not a GraphQL collection: it hits the RabbitMQ Management API to publish events directly into `notifications_queue`. No chat collection exists yet.
+- api-chat WebSocket events can't be exercised from Postman (Socket.IO protocol) — use a Socket.IO client passing the JWT as `auth: { token }`
 
 ### Running Services
 ```bash
@@ -250,6 +297,8 @@ npx nx serve api-orders
 npx nx serve api-reservations
 npx nx serve api-notifications
 npx nx serve api-Analytics
+npx nx serve api-search
+npx nx serve api-chat
 ```
 
 ### Seeding (after fresh DB)
@@ -261,6 +310,7 @@ DATABASE_URL="mongodb://localhost:27019/snackrapido_orders?replicaSet=rs0&direct
 DATABASE_URL="mongodb://localhost:27019/snackrapido_reservations?replicaSet=rs0&directConnection=true" npx prisma db push --schema apps/api-reservations/prisma/schema.prisma
 DATABASE_URL="mongodb://localhost:27019/snackrapido_notifications?replicaSet=rs0&directConnection=true" npx prisma db push --schema apps/api-notifications/prisma/schema.prisma
 DATABASE_URL="mongodb://localhost:27019/snackrapido_analytics?replicaSet=rs0&directConnection=true" npx prisma db push --schema apps/api-Analytics/prisma/schema.prisma
+DATABASE_URL="mongodb://localhost:27019/snackrapido_chat?replicaSet=rs0&directConnection=true" npx prisma db push --schema apps/api-chat/prisma/schema.prisma
 ```
 
 ### SSH Configuration (for GitHub)
@@ -270,24 +320,83 @@ DATABASE_URL="mongodb://localhost:27019/snackrapido_analytics?replicaSet=rs0&dir
 
 ---
 
+## Item Options & Server-Side Pricing (Glovo model)
+
+`MenuItem` now carries an option catalogue, and money is computed only by the server.
+
+**Model** — `OptionGroup` is one question on an item ("Choose your sauce"); `ItemOption`
+is one answer, with a `priceDelta` added to the base price when selected. A group's
+`required` + `minSelect` / `maxSelect` define an acceptable selection. `MenuItem` also
+gained `calories`.
+
+**Pricing authority** — `menu.validateItems` (RabbitMQ, owned by api-restaurants) is
+now the only thing that decides what a line costs. api-orders sends `menuItemId`,
+`quantity`, and `selectedOptionIds` and receives fully priced lines back, then derives
+`subtotal`/`tax`/`deliveryFee`/`total` from them. `CreateOrderDto` no longer accepts
+`tax`, `deliveryFee`, or `discount` at all, and a per-item `unitPrice` is accepted but
+ignored (kept so older clients keep working). Before this, client-supplied prices were
+written straight to the order, so any caller could set its own total.
+
+The same rules are re-checked server-side at order time: unavailable items, unavailable
+options, option ids that don't belong to the item, and selections that violate a
+group's required / min / max are all rejected.
+
+`OrderItem` gained `basePrice`, `optionsTotal`, and a typed `selectedOptions` snapshot
+(replacing the untyped `customizations` JSON blob) so a receipt can show the breakdown
+even after the restaurant changes its menu. The same item may appear on several lines
+with different options; lines are paired positionally with the request, never merged
+by menu item id.
+
+**Order rejection** — `OrderStatus` gained `REJECTED` (restaurant declined) alongside
+`CANCELLED` (withdrawn), reachable from `PENDING`/`CONFIRMED` only, via the
+`rejectOrder` mutation which requires a reason and stores `rejectedAt` /
+`rejectionReason`. Both notifications and analytics handle `order.rejected`, the latter
+tagging it `restaurant_rejected` so reports separate it from customer cancellations.
+
+**Verifying it** — with api-users, api-restaurants and api-orders serving:
+
+```bash
+node scripts/verify-glovo-pricing.js
+```
+
+It builds a required option group, then tries to underpay, skip a required choice,
+use a fabricated option id, exceed `maxSelect`, and reject an order as the customer,
+asserting the server refuses each one. 20 checks, all expected to pass.
+
+> **Careful with `prisma db push` on api-restaurants.** The `$geoNear` search needs a
+> 2dsphere index on `Restaurant.coordinates`, which Prisma cannot express in the
+> schema, so `db push` drops it. api-restaurants' `PrismaService` now recreates it on
+> every boot, so restarting the service is enough to repair it.
+
+---
+
 ## Known Issues & Notes
 
 1. **ts-node seed scripts**: The TS module setup causes issues with `ts-node`. Workaround: use `node -e` with `require('./node_modules/.prisma/<client>')` or write temp `.js` files.
 2. **`dist/` was being tracked**: Fixed — added to `.gitignore` and removed from git.
-3. **Analytics service** only processes order events with real logic; reservation events are acknowledged + logged but no analytics aggregation yet.
+3. **Analytics service** only processes order events with real logic; reservation and `message.sent` events are acknowledged + logged but no analytics aggregation yet.
 4. **`watch` command**: Not available on macOS by default. Use `while true; do clear; <cmd>; sleep 2; done` loop instead.
 5. **Phone number in users schema**: Stored as `Float?` (not String) — historical design choice.
+6. **Order lines created before server-side pricing** read back with `basePrice: 0` and `optionsTotal: 0`, because Prisma fills the schema defaults for fields missing from those documents. `unitPrice` and `totalPrice` on them are still correct; only the breakdown is unavailable. Re-seeding `snackrapido_orders` makes them consistent.
+7. **`LoginRestaurant` caches under the restaurant id but reads by email** (`CACHE_KEYS.RESTAURANT(email)` vs `RESTAURANT(restaurant.id)`), so the login cache never hits. Harmless but pointless work on every login — pre-existing, not yet fixed.
+8. **`user.validate` used to omit `role`** — fixed. It returned only `{ id, name, email, phone_number }`, which silently broke all three of its consumers, because `undefined !== 'SomeRole'` always takes the failure branch:
+   - `api-orders` `AuthGuard.updateAccessToken` re-signed refreshed access tokens without `email`/`role`, so `req.user.role` became `undefined` roughly 15 minutes into a session and the `Admin` checks in `orders.resolver.ts` and `orders.service.ts` stopped recognising admins. It failed closed (privilege lost, never gained).
+   - `api-restaurants` `createRestaurant` rejected every request that passed an `ownerId`, since it requires `validation.user?.role === 'Restaurant_Owner'`.
+   - `api-orders` `validateChangedBy` rejected every `changedBy` with `role: 'ADMIN'`.
+
+   The guard also no longer reads `email`/`role` off the refresh token, which never carried them — see "Silent token rotation" above.
 
 ---
 
 ## Next Steps
 
-**Phase 8: Chat Service** is the next (and final) phase to implement:
-1. Create `api-chat` app in the monorepo (Nx: `npx nx g @nx/nest:application api-chat --directory=apps/api-chat --projectNameAndRootFormat=as-provided --e2eTestRunner=none`)
-2. Add a WebSocket gateway (`@nestjs/websockets` + `@nestjs/platform-socket.io` — note: socket.io platform not yet in package.json, will need install)
-3. Implement Redis pub/sub for message broadcasting across instances (RedisService already has `publish`/`subscribe`)
-4. Store message history in MongoDB (new `snackrapido_chat` DB, Prisma schema for Message/Conversation)
-5. Publish `message.sent` events to RabbitMQ (via existing `emitEvent` pattern) so notifications service can alert offline users
+**All 8 backend phases are complete.** The remaining work is outside the microservice build-out:
+
+1. **Postman coverage for api-chat** — there is no `SnackRapido-Chat-Service.postman_collection.json` yet. The three GraphQL operations can be covered by a collection; the WebSocket events need a Socket.IO client (Postman's raw WS support does not speak the Socket.IO protocol) or a small Node script.
+2. **Frontends** — `SnackRapido-Frontend/customer-app` (Vite) and `SnackRapido-Frontend/restaurant-app` (Vite, same stack). The cloned `apps/restuarant-dashboard` was removed. The restaurant app still needs a live order inbox (accept/reject) and an option-group editor.
+   - Still missing for the Glovo model: a `Driver` role in api-users, and delivery / maps / payment services. The customer app cannot show live courier tracking until those exist.
+3. **api-gateway** — `apps/api-gateway` exists but is still Nx boilerplate; no Apollo Federation gateway composing the per-service subgraphs.
+4. **Analytics depth** — reservation and chat events are acked and logged but not aggregated.
 
 ### Reminders for whoever continues
 - Follow the flat service layout (`apps/<service>`), delete the generated `src/app/` boilerplate

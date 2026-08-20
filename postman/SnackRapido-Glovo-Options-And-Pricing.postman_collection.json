@@ -1,0 +1,1254 @@
+{
+  "info": {
+    "name": "SnackRapido - Glovo Options & Pricing",
+    "description": "Covers the item option catalogue (api-restaurants, 4001) and server-side order pricing (api-orders, 4002).\n\nToken capture follows the same pattern as the other SnackRapido collections (Login \u2192 pm.collectionVariables.set), but keeps two pairs because this collection switches actors mid-run:\n  restaurantAccessToken / restaurantRefreshToken  \u2014 from Login Restaurant\n  customerAccessToken / customerRefreshToken      \u2014 from Login Customer\nIDs (restaurantId, menuItemId, optionGroupId, orderId, \u2026) are also auto-saved by the request that creates them, same as Restaurants/Orders.\n\nRun the whole collection in order. Requires api-users (3000), api-restaurants (4001) and api-orders (4002), plus MongoDB, Redis and RabbitMQ.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// The AuthGuard rotates credentials silently: when an access token has",
+          "// expired but the refresh token is still good, it mints a new pair and",
+          "// returns them as 'accesstoken'/'refreshtoken' response headers. A client",
+          "// that ignores those headers keeps replaying the stale token.",
+          "//",
+          "// Unlike the other SnackRapido collections this one is logged in as two",
+          "// identities at once, so a rotated pair has to go back to whichever one",
+          "// made the call. Writing both would hand the restaurant a customer token",
+          "// and the ownership checks in folder 3 would then pass or fail for",
+          "// entirely the wrong reason.",
+          "const freshAccess = pm.response.headers.get('accesstoken');",
+          "const freshRefresh = pm.response.headers.get('refreshtoken');",
+          "",
+          "if (freshAccess || freshRefresh) {",
+          "  const sent = pm.request.headers.get('accesstoken');",
+          "  const prefix = sent === pm.collectionVariables.get('customerAccessToken') ? 'c'",
+          "               : sent === pm.collectionVariables.get('restaurantAccessToken') ? 'r'",
+          "               : null;",
+          "",
+          "  if (prefix) {",
+          "    if (freshAccess) pm.collectionVariables.set(prefix + 'AccessToken', freshAccess);",
+          "    if (freshRefresh) pm.collectionVariables.set(prefix + 'RefreshToken', freshRefresh);",
+          "    console.log('picked up rotated token pair for the ' + (prefix === 'c' ? 'customer' : 'restaurant'));",
+          "  } else {",
+          "    console.log('server rotated a token pair but the caller could not be matched to a stored identity - leaving variables alone');",
+          "  }",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "restaurantsUrl",
+      "value": "http://localhost:4001/graphql"
+    },
+    {
+      "key": "ordersUrl",
+      "value": "http://localhost:4002/graphql"
+    },
+    {
+      "key": "usersUrl",
+      "value": "http://localhost:3000/graphql"
+    },
+    {
+      "key": "restaurantEmail",
+      "value": "lagoulette.grill@snackrapido.test"
+    },
+    {
+      "key": "restaurantPassword",
+      "value": "Password123!"
+    },
+    {
+      "key": "customerEmail",
+      "value": "john@example.com"
+    },
+    {
+      "key": "customerPassword",
+      "value": "password123"
+    },
+    {
+      "key": "restaurantAccessToken",
+      "value": ""
+    },
+    {
+      "key": "restaurantRefreshToken",
+      "value": ""
+    },
+    {
+      "key": "customerAccessToken",
+      "value": ""
+    },
+    {
+      "key": "customerRefreshToken",
+      "value": ""
+    },
+    {
+      "key": "restaurantId",
+      "value": ""
+    },
+    {
+      "key": "restaurantName",
+      "value": ""
+    },
+    {
+      "key": "restaurantAddress",
+      "value": ""
+    },
+    {
+      "key": "customerId",
+      "value": ""
+    },
+    {
+      "key": "customerName",
+      "value": ""
+    },
+    {
+      "key": "menuItemId",
+      "value": ""
+    },
+    {
+      "key": "menuItemName",
+      "value": ""
+    },
+    {
+      "key": "menuItemPrice",
+      "value": ""
+    },
+    {
+      "key": "optionGroupId",
+      "value": ""
+    },
+    {
+      "key": "optFreeId",
+      "value": ""
+    },
+    {
+      "key": "optPaidId",
+      "value": ""
+    },
+    {
+      "key": "optPaidDelta",
+      "value": ""
+    },
+    {
+      "key": "optThirdId",
+      "value": ""
+    },
+    {
+      "key": "extraOptionId",
+      "value": ""
+    },
+    {
+      "key": "orderId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Setup",
+      "item": [
+        {
+          "name": "1. Login Restaurant",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data?.LoginRestaurant?.accessToken) {",
+                  "  pm.collectionVariables.set('restaurantAccessToken', res.data.LoginRestaurant.accessToken);",
+                  "  pm.collectionVariables.set('restaurantRefreshToken', res.data.LoginRestaurant.refreshToken);",
+                  "  if (res.data.LoginRestaurant.restaurant?.id) {",
+                  "    pm.collectionVariables.set('restaurantId', res.data.LoginRestaurant.restaurant.id);",
+                  "    pm.collectionVariables.set('restaurantName', res.data.LoginRestaurant.restaurant.name);",
+                  "    pm.collectionVariables.set('restaurantAddress', res.data.LoginRestaurant.restaurant.address);",
+                  "  }",
+                  "  // Pick the first available item so later folders can attach options to it.",
+                  "  const item = (res.data.LoginRestaurant.restaurant?.menuItems || []).find(m => m.available);",
+                  "  if (item) {",
+                  "    pm.collectionVariables.set('menuItemId', item.id);",
+                  "    pm.collectionVariables.set('menuItemName', item.name);",
+                  "    pm.collectionVariables.set('menuItemPrice', String(item.price));",
+                  "    console.log('Item under test:', item.name, 'price', item.price);",
+                  "  }",
+                  "  pm.test('Login successful - restaurant tokens saved', () => pm.expect(res.data.LoginRestaurant.accessToken).to.be.a('string'));",
+                  "  pm.test('Available menu item captured', () => pm.expect(item).to.be.an('object'));",
+                  "} else {",
+                  "  pm.test('Login failed', () => pm.expect.fail(JSON.stringify(res.errors || res.data)));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation LoginRestaurant($loginDto: LoginDto!) {\n  LoginRestaurant(loginDto: $loginDto) {\n    accessToken\n    refreshToken\n    restaurant {\n      id\n      name\n      address\n      menuItems { id name price available }\n    }\n    error { message }\n  }\n}",
+                "variables": "{\n  \"loginDto\": {\n    \"email\": \"{{restaurantEmail}}\",\n    \"password\": \"{{restaurantPassword}}\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{restaurantsUrl}}",
+              "host": [
+                "{{restaurantsUrl}}"
+              ]
+            },
+            "description": "Saves the owner tokens and picks an available menu item to use as the subject of every later request."
+          }
+        },
+        {
+          "name": "2. Login Customer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data?.Login?.accessToken) {",
+                  "  pm.collectionVariables.set('customerAccessToken', res.data.Login.accessToken);",
+                  "  pm.collectionVariables.set('customerRefreshToken', res.data.Login.refreshToken);",
+                  "  if (res.data.Login.user?.id) {",
+                  "    pm.collectionVariables.set('customerId', res.data.Login.user.id);",
+                  "    pm.collectionVariables.set('customerName', res.data.Login.user.name);",
+                  "  }",
+                  "  pm.test('Login successful - customer tokens saved', () => {",
+                  "    pm.expect(res.data.Login.accessToken).to.be.a('string');",
+                  "    pm.expect(res.data.Login.refreshToken).to.be.a('string');",
+                  "  });",
+                  "} else {",
+                  "  pm.test('Login failed', () => pm.expect.fail(JSON.stringify(res.errors || res.data)));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Login($email: String!, $password: String!) {\n  Login(email: $email, password: $password) {\n    accessToken\n    refreshToken\n    user { id name email }\n    error { message }\n  }\n}",
+                "variables": "{\n  \"email\": \"{{customerEmail}}\",\n  \"password\": \"{{customerPassword}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{usersUrl}}",
+              "host": [
+                "{{usersUrl}}"
+              ]
+            },
+            "description": "Note that api-users takes email/password as plain arguments, not a LoginDto input."
+          }
+        },
+        {
+          "name": "3. Reset item options",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A previous interrupted run can leave option groups behind, and a stray",
+                  "// required group would make every order below fail validation. Delete",
+                  "// whatever is there so the collection starts from a known state.",
+                  "const groups = pm.response.json().data?.getMenuItem?.menuItem?.optionGroups || [];",
+                  "pm.test('item read back for cleanup', () => pm.expect(pm.response.code).to.eql(200));",
+                  "",
+                  "if (groups.length === 0) {",
+                  "  pm.test('item starts with no option groups', () => pm.expect(groups).to.have.lengthOf(0));",
+                  "  return;",
+                  "}",
+                  "",
+                  "// Delete sequentially rather than with forEach: pm.sendRequest callbacks",
+                  "// are not awaited, so a parallel fan-out can let the next request start",
+                  "// while a required group still exists, which would fail every order below.",
+                  "const deleteNext = (queue, done) => {",
+                  "  const g = queue.shift();",
+                  "  if (!g) return done();",
+                  "  pm.sendRequest({",
+                  "    url: pm.collectionVariables.get('restaurantsUrl'),",
+                  "    method: 'POST',",
+                  "    header: {",
+                  "      'Content-Type': 'application/json',",
+                  "      accesstoken: pm.collectionVariables.get('restaurantAccessToken'),",
+                  "      refreshtoken: pm.collectionVariables.get('restaurantRefreshToken')",
+                  "    },",
+                  "    body: {",
+                  "      mode: 'raw',",
+                  "      raw: JSON.stringify({",
+                  "        query: 'mutation($dto: DeleteOptionGroupDto!) { deleteOptionGroup(deleteOptionGroupDto: $dto) { message error { message } } }',",
+                  "        variables: { dto: { id: g.id } }",
+                  "      })",
+                  "    }",
+                  "  }, (err, res) => {",
+                  "    const ok = !err && !!res.json().data?.deleteOptionGroup?.message;",
+                  "    pm.test(`leftover group \"${g.name}\" deleted`, () => pm.expect(ok, err ? String(err) : JSON.stringify(res.json())).to.be.true);",
+                  "    deleteNext(queue, done);",
+                  "  });",
+                  "};",
+                  "",
+                  "deleteNext([...groups], () => console.log('cleanup finished,', groups.length, 'group(s) removed'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetMenuItem($dto: GetMenuItemDto!) {\n  getMenuItem(getMenuItemDto: $dto) {\n    menuItem { id name optionGroups { id name } }\n    error { message }\n  }\n}",
+                "variables": "{\n  \"dto\": { \"menuItemId\": \"{{menuItemId}}\" }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{restaurantsUrl}}",
+              "host": [
+                "{{restaurantsUrl}}"
+              ]
+            },
+            "description": "Reads the item's current option groups and deletes them so the run is repeatable."
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Option Catalogue (owner)",
+      "item": [
+        {
+          "name": "1. Create Option Group - Choose your sauce",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json().data?.createOptionGroup;",
+                  "pm.test('group created', () => pm.expect(res?.optionGroup, JSON.stringify(res?.error || pm.response.json().errors)).to.be.an('object'));",
+                  "const g = res?.optionGroup;",
+                  "if (!g) return;",
+                  "pm.test('group is required, exactly one choice', () => {",
+                  "  pm.expect(g.required).to.be.true;",
+                  "  pm.expect(g.minSelect).to.eql(1);",
+                  "  pm.expect(g.maxSelect).to.eql(1);",
+                  "});",
+                  "pm.test('all three options were created', () => pm.expect(g.options).to.have.lengthOf(3));",
+                  "pm.test('options keep the price deltas the owner set', () => {",
+                  "  const byName = Object.fromEntries(g.options.map(o => [o.name, o.priceDelta]));",
+                  "  pm.expect(byName['Harissa']).to.eql(0);",
+                  "  pm.expect(byName['Garlic aioli']).to.eql(1.5);",
+                  "  pm.expect(byName['Chermoula']).to.eql(2.25);",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set('optionGroupId', g.id);",
+                  "const free = g.options.find(o => o.name === 'Harissa');",
+                  "const paid = g.options.find(o => o.name === 'Garlic aioli');",
+                  "const third = g.options.find(o => o.name === 'Chermoula');",
+                  "pm.collectionVariables.set('optFreeId', free.id);",
+                  "pm.collectionVariables.set('optPaidId', paid.id);",
+                  "pm.collectionVariables.set('optPaidDelta', String(paid.priceDelta));",
+                  "pm.collectionVariables.set('optThirdId', third.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "accesstoken",
+                "value": "{{restaurantAccessToken}}"
+              },
+              {
+                "key": "refreshtoken",
+                "value": "{{restaurantRefreshToken}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateOptionGroup($dto: CreateOptionGroupDto!) {\n  createOptionGroup(createOptionGroupDto: $dto) {\n    message\n    optionGroup {\n      id\n      name\n      required\n      minSelect\n      maxSelect\n      displayOrder\n      options { id name priceDelta available displayOrder }\n    }\n    error { message }\n  }\n}",
+                "variables": "{\n  \"dto\": {\n    \"menuItemId\": \"{{menuItemId}}\",\n    \"name\": \"Choose your sauce\",\n    \"required\": true,\n    \"minSelect\": 1,\n    \"maxSelect\": 1,\n    \"displayOrder\": 0,\n    \"options\": [\n      { \"name\": \"Harissa\", \"priceDelta\": 0 },\n      { \"name\": \"Garlic aioli\", \"priceDelta\": 1.5 },\n      { \"name\": \"Chermoula\", \"priceDelta\": 2.25 }\n    ]\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{restaurantsUrl}}",
+              "host": [
+                "{{restaurantsUrl}}"
+              ]
+            },
+            "description": "Creates a group and its choices in one call. Owner-only: needs both accesstoken and refreshtoken headers."
+          }
+        },
+        {
+          "name": "2. Reject unsatisfiable group (maxSelect < minSelect)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "const message = (body.errors || []).map(e => e.message).join('; ') || body.data?.createOptionGroup?.error?.message || '';",
+                  "pm.test('server refuses a group that no selection could satisfy', () => {",
+                  "  pm.expect(body.data?.createOptionGroup?.optionGroup, 'group should not have been created').to.not.be.an('object');",
+                  "  pm.expect(message).to.match(/maxSelect/i);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "accesstoken",
+                "value": "{{restaurantAccessToken}}"
+              },
+              {
+                "key": "refreshtoken",
+                "value": "{{restaurantRefreshToken}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateOptionGroup($dto: CreateOptionGroupDto!) {\n  createOptionGroup(createOptionGroupDto: $dto) {\n    message\n    optionGroup { id }\n    error { message }\n  }\n}",
+                "variables": "{\n  \"dto\": {\n    \"menuItemId\": \"{{menuItemId}}\",\n    \"name\": \"Impossible group\",\n    \"required\": true,\n    \"minSelect\": 3,\n    \"maxSelect\": 1\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{restaurantsUrl}}",
+              "host": [
+                "{{restaurantsUrl}}"
+              ]
+            },
+            "description": "Demands 3 choices but permits at most 1. Expected to fail \u2014 otherwise the item could never be ordered."
+          }
+        },
+        {
+          "name": "3. Get Menu Item (public, no auth)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const item = pm.response.json().data?.getMenuItem?.menuItem;",
+                  "pm.test('item is readable without a token', () => pm.expect(item).to.be.an('object'));",
+                  "if (!item) return;",
+                  "const g = (item.optionGroups || []).find(x => x.id === pm.collectionVariables.get('optionGroupId'));",
+                  "pm.test('the option catalogue is exposed to the customer app', () => pm.expect(g).to.be.an('object'));",
+                  "pm.test('options come back ordered by displayOrder', () => {",
+                  "  const order = g.options.map(o => o.displayOrder);",
+                  "  pm.expect(order).to.eql([...order].sort((a, b) => a - b));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetMenuItem($dto: GetMenuItemDto!) {\n  getMenuItem(getMenuItemDto: $dto) {\n    menuItem {\n      id\n      name\n      description\n      price\n      calories\n      available\n      images { url }\n      optionGroups {\n        id\n        name\n        required\n        minSelect\n        maxSelect\n        displayOrder\n        options { id name priceDelta available displayOrder }\n      }\n    }\n    error { message }\n  }\n}",
+                "variables": "{\n  \"dto\": { \"menuItemId\": \"{{menuItemId}}\" }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{restaurantsUrl}}",
+              "host": [
+                "{{restaurantsUrl}}"
+              ]
+            },
+            "description": "This is what backs the customer app's item detail sheet. Deliberately unauthenticated."
+          }
+        },
+        {
+          "name": "4. Add an option to the group",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json().data?.createItemOption;",
+                  "const g = res?.optionGroup;",
+                  "pm.test('option added', () => pm.expect(g, JSON.stringify(res?.error)).to.be.an('object'));",
+                  "if (!g) return;",
+                  "pm.test('group now offers four options', () => pm.expect(g.options).to.have.lengthOf(4));",
+                  "const extra = g.options.find(o => o.name === 'Extra hot sauce');",
+                  "pm.test('the new option is returned with its delta', () => pm.expect(extra.priceDelta).to.eql(0.75));",
+                  "pm.collectionVariables.set('extraOptionId', extra.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "accesstoken",
+                "value": "{{restaurantAccessToken}}"
+              },
+              {
+                "key": "refreshtoken",
+                "value": "{{restaurantRefreshToken}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateItemOption($dto: CreateItemOptionDto!) {\n  createItemOption(createItemOptionDto: $dto) {\n    message\n    optionGroup { id name options { id name priceDelta available } }\n    error { message }\n  }\n}",
+                "variables": "{\n  \"dto\": {\n    \"optionGroupId\": \"{{optionGroupId}}\",\n    \"name\": \"Extra hot sauce\",\n    \"priceDelta\": 0.75\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{restaurantsUrl}}",
+              "host": [
+                "{{restaurantsUrl}}"
+              ]
+            },
+            "description": "Mutations on a single option return the whole parent group, so the owner UI can patch one group in place."
+          }
+        },
+        {
+          "name": "5. Mark that option unavailable",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const g = pm.response.json().data?.updateItemOption?.optionGroup;",
+                  "pm.test('option updated', () => pm.expect(g).to.be.an('object'));",
+                  "if (!g) return;",
+                  "const extra = g.options.find(o => o.id === pm.collectionVariables.get('extraOptionId'));",
+                  "pm.test('option is now flagged unavailable', () => pm.expect(extra.available).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "accesstoken",
+                "value": "{{restaurantAccessToken}}"
+              },
+              {
+                "key": "refreshtoken",
+                "value": "{{restaurantRefreshToken}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateItemOption($dto: UpdateItemOptionDto!) {\n  updateItemOption(updateItemOptionDto: $dto) {\n    message\n    optionGroup { id options { id name priceDelta available } }\n    error { message }\n  }\n}",
+                "variables": "{\n  \"dto\": {\n    \"id\": \"{{extraOptionId}}\",\n    \"available\": false\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{restaurantsUrl}}",
+              "host": [
+                "{{restaurantsUrl}}"
+              ]
+            },
+            "description": "Sold out for the evening. The next folder proves an order cannot select it."
+          }
+        },
+        {
+          "name": "6. Options of another restaurant's item are rejected",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "const message = (body.errors || []).map(e => e.message).join('; ') || body.data?.createOptionGroup?.error?.message || '';",
+                  "pm.test('an owner cannot attach options to an item they do not own', () => {",
+                  "  pm.expect(body.data?.createOptionGroup?.optionGroup).to.not.be.an('object');",
+                  "  pm.expect(message).to.match(/not found|not owned/i);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "accesstoken",
+                "value": "{{restaurantAccessToken}}"
+              },
+              {
+                "key": "refreshtoken",
+                "value": "{{restaurantRefreshToken}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateOptionGroup($dto: CreateOptionGroupDto!) {\n  createOptionGroup(createOptionGroupDto: $dto) {\n    message\n    optionGroup { id }\n    error { message }\n  }\n}",
+                "variables": "{\n  \"dto\": {\n    \"menuItemId\": \"ffffffffffffffffffffffff\",\n    \"name\": \"Should never exist\",\n    \"required\": false\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{restaurantsUrl}}",
+              "host": [
+                "{{restaurantsUrl}}"
+              ]
+            },
+            "description": "Ownership check: the menu item id does not belong to the logged-in restaurant."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Pricing Enforcement (customer)",
+      "item": [
+        {
+          "name": "1. Order with a tampered unitPrice",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json().data?.createOrder;",
+                  "const order = res?.order;",
+                  "pm.test('order was accepted', () => pm.expect(order, JSON.stringify(res?.error || pm.response.json().errors)).to.be.an('object'));",
+                  "if (!order) return;",
+                  "pm.collectionVariables.set('orderId', order.id);",
+                  "  console.log('orderId saved:', order.id);",
+                  "",
+                  "const round = v => Math.round(v * 100) / 100;",
+                  "const base = Number(pm.collectionVariables.get('menuItemPrice'));",
+                  "const delta = Number(pm.collectionVariables.get('optPaidDelta'));",
+                  "const expectedUnit = round(base + delta);",
+                  "const expectedSubtotal = round(expectedUnit * 2);",
+                  "const expectedTotal = round(expectedSubtotal + round(expectedSubtotal * 0.08) + 5.99);",
+                  "const line = order.items[0];",
+                  "",
+                  "console.log('sent unitPrice 0.01, server charged', line.unitPrice);",
+                  "",
+                  "pm.test('the lie about unitPrice is ignored', () => pm.expect(line.unitPrice).to.not.eql(0.01));",
+                  "pm.test('unitPrice is the catalogue price plus the option delta', () => pm.expect(line.unitPrice).to.eql(expectedUnit));",
+                  "pm.test('breakdown adds up: basePrice + optionsTotal = unitPrice', () => {",
+                  "  pm.expect(line.basePrice).to.eql(base);",
+                  "  pm.expect(line.optionsTotal).to.eql(delta);",
+                  "  pm.expect(round(line.basePrice + line.optionsTotal)).to.eql(line.unitPrice);",
+                  "});",
+                  "pm.test('line total is unitPrice x quantity', () => pm.expect(line.totalPrice).to.eql(round(line.unitPrice * line.quantity)));",
+                  "pm.test('the lie about the item name is ignored too', () => pm.expect(line.menuItemName).to.eql(pm.collectionVariables.get('menuItemName')));",
+                  "pm.test('subtotal comes from the priced lines', () => pm.expect(order.subtotal).to.eql(expectedSubtotal));",
+                  "pm.test('tax is 8% applied server-side', () => pm.expect(order.tax).to.eql(round(expectedSubtotal * 0.08)));",
+                  "pm.test('delivery fee is the server flat fee', () => pm.expect(order.deliveryFee).to.eql(5.99));",
+                  "pm.test('total is subtotal + tax + fee', () => pm.expect(order.total).to.eql(expectedTotal));",
+                  "pm.test('the chosen option is snapshotted on the line', () => {",
+                  "  pm.expect(line.selectedOptions).to.have.lengthOf(1);",
+                  "  pm.expect(line.selectedOptions[0].name).to.eql('Garlic aioli');",
+                  "  pm.expect(line.selectedOptions[0].priceDelta).to.eql(delta);",
+                  "  pm.expect(line.selectedOptions[0].groupName).to.eql('Choose your sauce');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "accesstoken",
+                "value": "{{customerAccessToken}}"
+              },
+              {
+                "key": "refreshtoken",
+                "value": "{{customerRefreshToken}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateOrder($dto: CreateOrderDto!) {\n  createOrder(createOrderDto: $dto) {\n    message\n    order {\n      id\n      orderNumber\n      status\n      subtotal\n      tax\n      deliveryFee\n      discount\n      total\n      items {\n        menuItemName\n        quantity\n        basePrice\n        optionsTotal\n        unitPrice\n        totalPrice\n        specialRequests\n        selectedOptions { optionId optionGroupId groupName name priceDelta }\n      }\n    }\n    error { message }\n  }\n}",
+                "variables": "{\n  \"dto\": {\n    \"customerId\": \"{{customerId}}\",\n    \"customerName\": \"{{customerName}}\",\n    \"customerEmail\": \"{{customerEmail}}\",\n    \"restaurantId\": \"{{restaurantId}}\",\n    \"restaurantName\": \"{{restaurantName}}\",\n    \"restaurantAddress\": \"{{restaurantAddress}}\",\n    \"deliveryType\": \"DELIVERY\",\n    \"deliveryAddress\": \"10 Test Street, Tunis\",\n    \"items\": [\n      {\n        \"menuItemId\": \"{{menuItemId}}\",\n        \"quantity\": 2,\n        \"selectedOptionIds\": [\"{{optPaidId}}\"],\n        \"unitPrice\": 0.01,\n        \"menuItemName\": \"Free Lunch\"\n      }\n    ]\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{ordersUrl}}",
+              "host": [
+                "{{ordersUrl}}"
+              ]
+            },
+            "description": "The important one. The request claims the item costs 0.01 and is called 'Free Lunch'. Both are ignored: api-orders asks api-restaurants to price the line from its own catalogue, then derives tax, delivery fee and total itself. Note the request cannot even send tax/deliveryFee/discount any more \u2014 those fields no longer exist on CreateOrderDto."
+          }
+        },
+        {
+          "name": "2. Order omitting a required choice",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json().data?.createOrder;",
+                  "const message = res?.error?.message || (pm.response.json().errors || []).map(e => e.message).join('; ');",
+                  "pm.test('order is refused', () => pm.expect(res?.order).to.not.be.an('object'));",
+                  "pm.test('the message names the unsatisfied group', () => pm.expect(message).to.match(/requires at least 1/i));",
+                  "console.log(message);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "accesstoken",
+                "value": "{{customerAccessToken}}"
+              },
+              {
+                "key": "refreshtoken",
+                "value": "{{customerRefreshToken}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateOrder($dto: CreateOrderDto!) {\n  createOrder(createOrderDto: $dto) {\n    message\n    order { id }\n    error { message }\n  }\n}",
+                "variables": "{\n  \"dto\": {\n    \"customerId\": \"{{customerId}}\",\n    \"customerName\": \"{{customerName}}\",\n    \"customerEmail\": \"{{customerEmail}}\",\n    \"restaurantId\": \"{{restaurantId}}\",\n    \"restaurantName\": \"{{restaurantName}}\",\n    \"restaurantAddress\": \"{{restaurantAddress}}\",\n    \"deliveryType\": \"DELIVERY\",\n    \"deliveryAddress\": \"10 Test Street, Tunis\",\n    \"items\": [\n      { \"menuItemId\": \"{{menuItemId}}\", \"quantity\": 1, \"selectedOptionIds\": [] }\n    ]\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{ordersUrl}}",
+              "host": [
+                "{{ordersUrl}}"
+              ]
+            },
+            "description": "The sauce group is required with minSelect 1, so an empty selection must be refused even though the client sent a well-formed request."
+          }
+        },
+        {
+          "name": "3. Order with a fabricated option id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json().data?.createOrder;",
+                  "const message = res?.error?.message || (pm.response.json().errors || []).map(e => e.message).join('; ');",
+                  "pm.test('order is refused', () => pm.expect(res?.order).to.not.be.an('object'));",
+                  "pm.test('an option id not belonging to this item is not priced', () => pm.expect(message).to.match(/not available for/i));",
+                  "console.log(message);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "accesstoken",
+                "value": "{{customerAccessToken}}"
+              },
+              {
+                "key": "refreshtoken",
+                "value": "{{customerRefreshToken}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateOrder($dto: CreateOrderDto!) {\n  createOrder(createOrderDto: $dto) {\n    message\n    order { id }\n    error { message }\n  }\n}",
+                "variables": "{\n  \"dto\": {\n    \"customerId\": \"{{customerId}}\",\n    \"customerName\": \"{{customerName}}\",\n    \"customerEmail\": \"{{customerEmail}}\",\n    \"restaurantId\": \"{{restaurantId}}\",\n    \"restaurantName\": \"{{restaurantName}}\",\n    \"restaurantAddress\": \"{{restaurantAddress}}\",\n    \"deliveryType\": \"DELIVERY\",\n    \"deliveryAddress\": \"10 Test Street, Tunis\",\n    \"items\": [\n      { \"menuItemId\": \"{{menuItemId}}\", \"quantity\": 1, \"selectedOptionIds\": [\"ffffffffffffffffffffffff\"] }\n    ]\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{ordersUrl}}",
+              "host": [
+                "{{ordersUrl}}"
+              ]
+            },
+            "description": "Options are resolved against this item's own groups, so an invented id cannot introduce a price."
+          }
+        },
+        {
+          "name": "4. Order exceeding maxSelect",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json().data?.createOrder;",
+                  "const message = res?.error?.message || (pm.response.json().errors || []).map(e => e.message).join('; ');",
+                  "pm.test('order is refused', () => pm.expect(res?.order).to.not.be.an('object'));",
+                  "pm.test('more selections than the group permits is refused', () => pm.expect(message).to.match(/at most 1/i));",
+                  "console.log(message);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "accesstoken",
+                "value": "{{customerAccessToken}}"
+              },
+              {
+                "key": "refreshtoken",
+                "value": "{{customerRefreshToken}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateOrder($dto: CreateOrderDto!) {\n  createOrder(createOrderDto: $dto) {\n    message\n    order { id }\n    error { message }\n  }\n}",
+                "variables": "{\n  \"dto\": {\n    \"customerId\": \"{{customerId}}\",\n    \"customerName\": \"{{customerName}}\",\n    \"customerEmail\": \"{{customerEmail}}\",\n    \"restaurantId\": \"{{restaurantId}}\",\n    \"restaurantName\": \"{{restaurantName}}\",\n    \"restaurantAddress\": \"{{restaurantAddress}}\",\n    \"deliveryType\": \"DELIVERY\",\n    \"deliveryAddress\": \"10 Test Street, Tunis\",\n    \"items\": [\n      {\n        \"menuItemId\": \"{{menuItemId}}\",\n        \"quantity\": 1,\n        \"selectedOptionIds\": [\"{{optFreeId}}\", \"{{optThirdId}}\"]\n      }\n    ]\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{ordersUrl}}",
+              "host": [
+                "{{ordersUrl}}"
+              ]
+            },
+            "description": "Two sauces in a group whose maxSelect is 1."
+          }
+        },
+        {
+          "name": "5. Order selecting a sold-out option",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json().data?.createOrder;",
+                  "const message = res?.error?.message || (pm.response.json().errors || []).map(e => e.message).join('; ');",
+                  "pm.test('order is refused', () => pm.expect(res?.order).to.not.be.an('object'));",
+                  "pm.test('an option the owner marked unavailable cannot be ordered', () => pm.expect(message).to.match(/unavailable/i));",
+                  "console.log(message);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "accesstoken",
+                "value": "{{customerAccessToken}}"
+              },
+              {
+                "key": "refreshtoken",
+                "value": "{{customerRefreshToken}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateOrder($dto: CreateOrderDto!) {\n  createOrder(createOrderDto: $dto) {\n    message\n    order { id }\n    error { message }\n  }\n}",
+                "variables": "{\n  \"dto\": {\n    \"customerId\": \"{{customerId}}\",\n    \"customerName\": \"{{customerName}}\",\n    \"customerEmail\": \"{{customerEmail}}\",\n    \"restaurantId\": \"{{restaurantId}}\",\n    \"restaurantName\": \"{{restaurantName}}\",\n    \"restaurantAddress\": \"{{restaurantAddress}}\",\n    \"deliveryType\": \"DELIVERY\",\n    \"deliveryAddress\": \"10 Test Street, Tunis\",\n    \"items\": [\n      { \"menuItemId\": \"{{menuItemId}}\", \"quantity\": 1, \"selectedOptionIds\": [\"{{extraOptionId}}\"] }\n    ]\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{ordersUrl}}",
+              "host": [
+                "{{ordersUrl}}"
+              ]
+            },
+            "description": "Uses the option marked unavailable in the previous folder. Availability is enforced at order time, not just hidden in the UI."
+          }
+        },
+        {
+          "name": "6. Same item twice with different options",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json().data?.createOrder;",
+                  "const order = res?.order;",
+                  "pm.test('order was accepted', () => pm.expect(order, JSON.stringify(res?.error)).to.be.an('object'));",
+                  "if (!order) return;",
+                  "",
+                  "const round = v => Math.round(v * 100) / 100;",
+                  "const base = Number(pm.collectionVariables.get('menuItemPrice'));",
+                  "const delta = Number(pm.collectionVariables.get('optPaidDelta'));",
+                  "",
+                  "pm.test('both lines are kept, not merged into one', () => pm.expect(order.items).to.have.lengthOf(2));",
+                  "pm.test('each line is priced by its own option', () => {",
+                  "  pm.expect(order.items[0].unitPrice).to.eql(base);",
+                  "  pm.expect(order.items[1].unitPrice).to.eql(round(base + delta));",
+                  "});",
+                  "pm.test('special requests stay attached to the right line', () => {",
+                  "  pm.expect(order.items[0].specialRequests).to.eql('well done');",
+                  "  pm.expect(order.items[1].specialRequests).to.eql('no salt');",
+                  "});",
+                  "pm.test('subtotal is the sum of both lines', () => pm.expect(order.subtotal).to.eql(round(base + round(base + delta))));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "accesstoken",
+                "value": "{{customerAccessToken}}"
+              },
+              {
+                "key": "refreshtoken",
+                "value": "{{customerRefreshToken}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateOrder($dto: CreateOrderDto!) {\n  createOrder(createOrderDto: $dto) {\n    message\n    order {\n      id\n      subtotal\n      total\n      items {\n        menuItemName\n        quantity\n        unitPrice\n        totalPrice\n        specialRequests\n        selectedOptions { name priceDelta }\n      }\n    }\n    error { message }\n  }\n}",
+                "variables": "{\n  \"dto\": {\n    \"customerId\": \"{{customerId}}\",\n    \"customerName\": \"{{customerName}}\",\n    \"customerEmail\": \"{{customerEmail}}\",\n    \"restaurantId\": \"{{restaurantId}}\",\n    \"restaurantName\": \"{{restaurantName}}\",\n    \"restaurantAddress\": \"{{restaurantAddress}}\",\n    \"deliveryType\": \"DELIVERY\",\n    \"deliveryAddress\": \"10 Test Street, Tunis\",\n    \"items\": [\n      {\n        \"menuItemId\": \"{{menuItemId}}\",\n        \"quantity\": 1,\n        \"selectedOptionIds\": [\"{{optFreeId}}\"],\n        \"specialRequests\": \"well done\"\n      },\n      {\n        \"menuItemId\": \"{{menuItemId}}\",\n        \"quantity\": 1,\n        \"selectedOptionIds\": [\"{{optPaidId}}\"],\n        \"specialRequests\": \"no salt\"\n      }\n    ]\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{ordersUrl}}",
+              "host": [
+                "{{ordersUrl}}"
+              ]
+            },
+            "description": "One portion with the free sauce, one with the paid sauce. Lines are paired positionally with the request, so the same menu item can appear more than once with different customizations and different prices."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Order Rejection",
+      "item": [
+        {
+          "name": "1. Customer cannot reject their own order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json().data?.rejectOrder;",
+                  "const message = res?.error?.message || (pm.response.json().errors || []).map(e => e.message).join('; ');",
+                  "pm.test('rejection is refused for a customer', () => pm.expect(res?.order).to.not.be.an('object'));",
+                  "pm.test('only the owning restaurant may reject', () => pm.expect(message).to.match(/only the restaurant/i));",
+                  "console.log(message);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "accesstoken",
+                "value": "{{customerAccessToken}}"
+              },
+              {
+                "key": "refreshtoken",
+                "value": "{{customerRefreshToken}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation RejectOrder($dto: RejectOrderDto!) {\n  rejectOrder(rejectOrderDto: $dto) {\n    message\n    order { id status }\n    error { message }\n  }\n}",
+                "variables": "{\n  \"dto\": {\n    \"orderId\": \"{{orderId}}\",\n    \"reason\": \"I changed my mind\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{ordersUrl}}",
+              "host": [
+                "{{ordersUrl}}"
+              ]
+            },
+            "description": "Rejection means 'the restaurant declined'. A customer withdrawing an order is cancelOrder instead. The actor is taken from the token, never from the body, and must match the order's restaurant."
+          }
+        },
+        {
+          "name": "2. Restaurant rejects with a reason",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json().data?.rejectOrder;",
+                  "const order = res?.order;",
+                  "pm.test('rejection accepted', () => pm.expect(order, JSON.stringify(res?.error)).to.be.an('object'));",
+                  "if (!order) return;",
+                  "pm.test('status is REJECTED, not CANCELLED', () => pm.expect(order.status).to.eql('REJECTED'));",
+                  "pm.test('the reason is stored on the order', () => pm.expect(order.rejectionReason).to.eql('Out of lamb for the evening'));",
+                  "pm.test('rejectedAt is stamped', () => pm.expect(order.rejectedAt).to.be.a('string'));",
+                  "pm.test('the transition is recorded in history', () => {",
+                  "  const last = order.statusHistory[order.statusHistory.length - 1];",
+                  "  pm.expect(last.status).to.eql('REJECTED');",
+                  "  pm.expect(last.changedByRole).to.eql('RESTAURANT');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "accesstoken",
+                "value": "{{restaurantAccessToken}}"
+              },
+              {
+                "key": "refreshtoken",
+                "value": "{{restaurantRefreshToken}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation RejectOrder($dto: RejectOrderDto!) {\n  rejectOrder(rejectOrderDto: $dto) {\n    message\n    order {\n      id\n      status\n      rejectedAt\n      rejectionReason\n      statusHistory { status previousStatus reason changedByRole timestamp }\n    }\n    error { message }\n  }\n}",
+                "variables": "{\n  \"dto\": {\n    \"orderId\": \"{{orderId}}\",\n    \"reason\": \"Out of lamb for the evening\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{ordersUrl}}",
+              "host": [
+                "{{ordersUrl}}"
+              ]
+            },
+            "description": "Emits order.rejected, which both api-notifications and api-Analytics consume (the latter tagging it restaurant_rejected)."
+          }
+        },
+        {
+          "name": "3. A rejected order is final",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json().data?.updateOrderStatus;",
+                  "const message = res?.error?.message || (pm.response.json().errors || []).map(e => e.message).join('; ');",
+                  "pm.test('a rejected order cannot move on', () => pm.expect(res?.order).to.not.be.an('object'));",
+                  "pm.test('the invalid transition is named', () => pm.expect(message).to.match(/invalid status transition/i));",
+                  "console.log(message);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "accesstoken",
+                "value": "{{restaurantAccessToken}}"
+              },
+              {
+                "key": "refreshtoken",
+                "value": "{{restaurantRefreshToken}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateOrderStatus($updateStatusDto: UpdateOrderStatusDto!) {\n  updateOrderStatus(updateStatusDto: $updateStatusDto) {\n    message\n    order { id status }\n    error { message }\n  }\n}",
+                "variables": "{\n  \"updateStatusDto\": {\n    \"orderId\": \"{{orderId}}\",\n    \"status\": \"CONFIRMED\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{ordersUrl}}",
+              "host": [
+                "{{ordersUrl}}"
+              ]
+            },
+            "description": "REJECTED is a terminal state, so confirming afterwards must fail."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Teardown",
+      "item": [
+        {
+          "name": "1. Delete the option group",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json().data?.deleteOptionGroup;",
+                  "pm.test('group deleted', () => pm.expect(res?.message, JSON.stringify(res?.error)).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "accesstoken",
+                "value": "{{restaurantAccessToken}}"
+              },
+              {
+                "key": "refreshtoken",
+                "value": "{{restaurantRefreshToken}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation DeleteOptionGroup($dto: DeleteOptionGroupDto!) {\n  deleteOptionGroup(deleteOptionGroupDto: $dto) {\n    message\n    error { message }\n  }\n}",
+                "variables": "{\n  \"dto\": { \"id\": \"{{optionGroupId}}\" }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{restaurantsUrl}}",
+              "host": [
+                "{{restaurantsUrl}}"
+              ]
+            },
+            "description": "Deletes the group and its options, leaving the seeded menu as it was."
+          }
+        },
+        {
+          "name": "2. Item has no option groups again",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const item = pm.response.json().data?.getMenuItem?.menuItem;",
+                  "pm.test('the test group is gone', () => pm.expect(item.optionGroups || []).to.have.lengthOf(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetMenuItem($dto: GetMenuItemDto!) {\n  getMenuItem(getMenuItemDto: $dto) {\n    menuItem { id name optionGroups { id name } }\n    error { message }\n  }\n}",
+                "variables": "{\n  \"dto\": { \"menuItemId\": \"{{menuItemId}}\" }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{restaurantsUrl}}",
+              "host": [
+                "{{restaurantsUrl}}"
+              ]
+            },
+            "description": "Confirms the cleanup, so the collection can be run again immediately."
+          }
+        }
+      ]
+    }
+  ]
+}

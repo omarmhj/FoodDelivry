@@ -272,7 +272,78 @@ READY → OUT_FOR_DELIVERY, DELIVERED
 OUT_FOR_DELIVERY → DELIVERED
 DELIVERED → (final)
 CANCELLED → (final)
+REJECTED → (final)
 ```
+
+### Reject Flow (restaurant declines, distinct from cancel)
+```
+Reject Order (only from PENDING or CONFIRMED)
+  POST http://localhost:4002/graphql — rejectOrder
+    → the actor is read from the token and must be the order's restaurant;
+      a customer token is refused even for their own order
+    → RabbitMQ: emits "order.rejected" → notifications_queue + analytics_queue
+    → analytics records it as a lost order tagged "restaurant_rejected"
+```
+
+---
+
+## PHASE 3b — Item options & server-side pricing
+
+Collection: `SnackRapido-Glovo-Options-And-Pricing.postman_collection.json`
+
+This one spans api-restaurants and api-orders, because pricing is a conversation
+between them: api-orders never trusts the client's numbers, it calls
+`menu.validateItems` on api-restaurants over RabbitMQ and uses whatever comes
+back. The collection exists mainly to prove that, so several requests send
+deliberately bad data and assert the server refuses or overrides it.
+
+Run it as a whole collection, in order — later requests use ids saved by earlier
+ones. It cleans up after itself, so it can be run repeatedly.
+
+```
+0. Setup            login owner + customer, pick a menu item, clear stale groups
+1. Option Catalogue create a required "Choose your sauce" group, add/disable an
+                    option, read it back through the public getMenuItem query,
+                    and confirm cross-restaurant writes and impossible
+                    min/maxSelect combinations are refused
+2. Pricing          orders that lie about unitPrice, omit a required choice,
+                    invent an option id, exceed maxSelect, or pick a sold-out
+                    option — plus the same item twice with different options,
+                    which must stay two separately priced lines
+3. Rejection        customer cannot reject; restaurant can, with a reason;
+                    REJECTED is terminal
+4. Teardown         delete the group and verify the item is back to its seeded state
+```
+
+Command line, with all three of api-users, api-restaurants and api-orders up:
+```bash
+npx newman run Food-Delivery-WebApp/postman/SnackRapido-Glovo-Options-And-Pricing.postman_collection.json
+```
+
+Expect 20 requests and 54 assertions, 0 failures. `scripts/verify-glovo-pricing.js`
+covers the same ground as a standalone Node script if you would rather not
+install newman.
+
+This collection carries a **collection-level test script** that copies rotated
+`accesstoken`/`refreshtoken` response headers back into collection variables.
+It has to route each rotated pair to the identity that made the call, because
+unlike the other collections this one is logged in as both a restaurant and a
+customer at once — writing both pairs would give the restaurant a customer token
+and the ownership tests in folder 3 would then pass for the wrong reason.
+
+### What the collection cannot reach
+
+Token rotation only happens once an access token has actually expired. A full run
+takes about four seconds, so no collection will ever exercise that branch. Cover
+it separately:
+
+```bash
+node scripts/verify-token-rotation.js
+```
+
+It signs an already-expired access token, presents it with a valid refresh token,
+and asserts the refreshed token keeps `email` and `role` — for a customer, for a
+restaurant, and that an unknown id gets no token at all. Expect 8 passed, 0 failed.
 
 ---
 
