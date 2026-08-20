@@ -11,7 +11,18 @@ registerEnumType(DeliveryType, { name: 'DeliveryType' });
 // Re-export Prisma enums for convenience
 export { OrderStatus, PaymentStatus, DeliveryType };
 
-// Order Item Input DTO
+/**
+ * One requested line of an order.
+ *
+ * This input deliberately carries no money and no item copy. The name,
+ * description, image, and every price are resolved by api-restaurants from its
+ * own catalogue during `menu.validateItems`, so a client cannot dictate what an
+ * item is called or what it costs.
+ *
+ * `unitPrice`, `menuItemName`, `menuItemDescription`, and `menuItemImage` are
+ * still accepted for compatibility with clients written against the previous
+ * schema, but they are ignored — see `OrdersService.createOrder`.
+ */
 @InputType()
 export class CreateOrderItemDto {
   @Field()
@@ -19,10 +30,30 @@ export class CreateOrderItemDto {
   @IsString({ message: 'Menu item ID must be a string.' })
   menuItemId: string;
 
-  @Field()
-  @IsNotEmpty({ message: 'Menu item name is required.' })
+  @Field(() => Int)
+  @IsNumber({}, { message: 'Quantity must be a number.' })
+  @Min(1, { message: 'Quantity must be at least 1.' })
+  @Max(99, { message: 'Quantity cannot exceed 99.' })
+  quantity: number;
+
+  /** Ids of the chosen `ItemOption`s; validated and priced by api-restaurants. */
+  @Field(() => [String], { nullable: true })
+  @IsOptional()
+  @IsArray({ message: 'Selected option IDs must be an array.' })
+  @IsString({ each: true, message: 'Each selected option ID must be a string.' })
+  selectedOptionIds?: string[];
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString({ message: 'Special requests must be a string.' })
+  specialRequests?: string;
+
+  // ---- Accepted for backwards compatibility, ignored by the server ----
+
+  @Field({ nullable: true })
+  @IsOptional()
   @IsString({ message: 'Menu item name must be a string.' })
-  menuItemName: string;
+  menuItemName?: string;
 
   @Field({ nullable: true })
   @IsOptional()
@@ -34,25 +65,10 @@ export class CreateOrderItemDto {
   @IsString({ message: 'Menu item image must be a string.' })
   menuItemImage?: string;
 
-  @Field(() => Int)
-  @IsNumber({}, { message: 'Quantity must be a number.' })
-  @Min(1, { message: 'Quantity must be at least 1.' })
-  @Max(99, { message: 'Quantity cannot exceed 99.' })
-  quantity: number;
-
-  @Field(() => Float)
+  @Field(() => Float, { nullable: true })
+  @IsOptional()
   @IsNumber({}, { message: 'Unit price must be a number.' })
-  @Min(0, { message: 'Unit price must be positive.' })
-  unitPrice: number;
-
-  @Field({ nullable: true })
-  @IsOptional()
-  @IsString({ message: 'Special requests must be a string.' })
-  specialRequests?: string;
-
-  @Field(() => String, { nullable: true })
-  @IsOptional()
-  customizations?: any; // JSON field
+  unitPrice?: number;
 }
 
 // Create Order Input DTO
@@ -108,6 +124,16 @@ export class CreateOrderDto {
   @IsString({ message: 'Delivery address must be a string.' })
   deliveryAddress?: string;
 
+  @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber({}, { message: 'Delivery latitude must be a number.' })
+  deliveryLatitude?: number;
+
+  @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber({}, { message: 'Delivery longitude must be a number.' })
+  deliveryLongitude?: number;
+
   @Field({ nullable: true })
   @IsOptional()
   @IsString({ message: 'Delivery instructions must be a string.' })
@@ -117,24 +143,6 @@ export class CreateOrderDto {
   @IsOptional()
   @IsString({ message: 'Special instructions must be a string.' })
   specialInstructions?: string;
-
-  @Field(() => Float, { nullable: true })
-  @IsOptional()
-  @IsNumber({}, { message: 'Tax must be a number.' })
-  @Min(0, { message: 'Tax must be positive.' })
-  tax?: number;
-
-  @Field(() => Float, { nullable: true })
-  @IsOptional()
-  @IsNumber({}, { message: 'Delivery fee must be a number.' })
-  @Min(0, { message: 'Delivery fee must be positive.' })
-  deliveryFee?: number;
-
-  @Field(() => Float, { nullable: true })
-  @IsOptional()
-  @IsNumber({}, { message: 'Discount must be a number.' })
-  @Min(0, { message: 'Discount must be positive.' })
-  discount?: number;
 }
 
 // Update Order Status DTO
@@ -168,6 +176,28 @@ export class UpdateOrderStatusDto {
   @IsOptional()
   @IsString({ message: 'Changed by role must be a string.' })
   changedByRole?: string;
+}
+
+/**
+ * Restaurant-side refusal of an order. Separate from `CancelOrderDto` because a
+ * reason is mandatory here: the customer is told why their order was declined.
+ */
+@InputType()
+export class RejectOrderDto {
+  @Field()
+  @IsNotEmpty({ message: 'Order ID is required.' })
+  @IsString({ message: 'Order ID must be a string.' })
+  orderId: string;
+
+  @Field()
+  @IsNotEmpty({ message: 'A rejection reason is required.' })
+  @IsString({ message: 'Rejection reason must be a string.' })
+  reason: string;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString({ message: 'Rejected by must be a string.' })
+  rejectedBy?: string;
 }
 
 // Cancel Order DTO

@@ -5,7 +5,9 @@ import { RedisService } from '../../../libs/shared/src/redis.service';
 import { MESSAGE_PATTERNS, CACHE_KEYS } from '../../../libs/shared/src/message-patterns';
 import {
   CreateOrderDto,
+  CreateOrderItemDto,
   UpdateOrderStatusDto,
+  RejectOrderDto,
   CancelOrderDto,
   GetOrdersFilterDto,
   CreateOrderReviewDto,
@@ -18,7 +20,15 @@ import {
   OrderEventData,
   OrderValidationResult,
   MenuItemValidation,
+  PricedOrderItem,
 } from './types/order.types';
+import { OrdersGateway } from './orders.gateway';
+
+/** Sales tax applied to the subtotal. Owned here, never accepted from a client. */
+const TAX_RATE = 0.08;
+
+/** Flat fee charged on delivery orders. Owned here, never accepted from a client. */
+const DELIVERY_FEE = 5.99;
 
 @Injectable()
 export class OrdersService {
@@ -28,6 +38,7 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly rabbitMQService: RabbitMQService,
     private readonly redisService: RedisService,
+    private readonly ordersGateway: OrdersGateway,
   ) {}
 
   /**
@@ -57,7 +68,16 @@ export class OrdersService {
         throw new BadRequestException(`Invalid restaurant: ${restaurantValidation.error}`);
       }
 
-      // 3. Validate menu items exist and are available via restaurants service
+      // 3. Validate order shape before involving another service
+      const validation = await this.validateOrderItems(createOrderDto.items);
+      if (!validation.isValid) {
+        throw new BadRequestException(`Order validation failed: ${validation.errors.join(', ')}`);
+      }
+
+      // 4. Have the restaurants service validate and price the cart. It is the
+      // only authority on money: we send ids and quantities, and it returns the
+      // lines to persist. Anything price-shaped in the request is discarded,
+      // which is what stops a client from choosing what it pays.
       const menuItemsValidation = await this.rabbitMQService.sendAndWait(
         'menu.validateItems',
         {
@@ -65,6 +85,7 @@ export class OrdersService {
           items: createOrderDto.items.map(item => ({
             menuItemId: item.menuItemId,
             quantity: item.quantity,
+            selectedOptionIds: item.selectedOptionIds ?? [],
           })),
         }
       );
@@ -73,14 +94,17 @@ export class OrdersService {
         throw new BadRequestException(`Invalid menu items: ${menuItemsValidation.error}`);
       }
 
-      // 4. Validate order business rules
-      const validation = await this.validateOrderItems(createOrderDto.items);
-      if (!validation.isValid) {
-        throw new BadRequestException(`Order validation failed: ${validation.errors.join(', ')}`);
+      const pricedItems: PricedOrderItem[] = menuItemsValidation.items ?? [];
+
+      // The priced lines come back in request order, one per requested line, which
+      // is what lets them be paired up by index below. Bail out rather than
+      // guessing if that ever stops holding.
+      if (pricedItems.length !== createOrderDto.items.length) {
+        throw new BadRequestException('Menu item pricing did not cover every requested item');
       }
 
-      // 5. Calculate order totals
-      const calculation = this.calculateOrderTotals(createOrderDto);
+      // 5. Derive every monetary field from the priced lines
+      const calculation = this.calculateOrderTotals(pricedItems, createOrderDto.deliveryType);
       
       // Generate unique order number
       const orderNumber = await this.generateOrderNumber();
@@ -113,18 +137,28 @@ export class OrdersService {
           deliveryAddress: createOrderDto.deliveryAddress,
           deliveryInstructions: createOrderDto.deliveryInstructions,
           specialInstructions: createOrderDto.specialInstructions,
+          metadata: {
+            deliveryLatitude: createOrderDto.deliveryLatitude,
+            deliveryLongitude: createOrderDto.deliveryLongitude,
+            restaurantLatitude: restaurantValidation.restaurant?.latitude,
+            restaurantLongitude: restaurantValidation.restaurant?.longitude,
+          },
           estimatedDeliveryTime,
           items: {
-            create: createOrderDto.items.map(item => ({
+            create: pricedItems.map((item, index) => ({
               menuItemId: item.menuItemId,
               menuItemName: item.menuItemName,
               menuItemDescription: item.menuItemDescription,
               menuItemImage: item.menuItemImage,
               quantity: item.quantity,
+              basePrice: item.basePrice,
+              optionsTotal: item.optionsTotal,
               unitPrice: item.unitPrice,
-              totalPrice: item.quantity * item.unitPrice,
-              specialRequests: item.specialRequests,
-              customizations: item.customizations,
+              totalPrice: item.totalPrice,
+              selectedOptions: item.selectedOptions,
+              // Free text is the one part of a line the client still owns, so it
+              // is carried across from the matching requested line.
+              specialRequests: createOrderDto.items[index].specialRequests,
             })),
           },
         },
@@ -143,10 +177,10 @@ export class OrdersService {
       });
 
       // Attach status history to order
-      const orderWithHistory = {
+      const orderWithHistory = this.attachTrackingCoords({
         ...order,
         statusHistory,
-      };
+      });
 
       // Cache order data
       await this.cacheOrder(orderWithHistory);
@@ -206,6 +240,13 @@ export class OrdersService {
         case OrderStatus.CONFIRMED:
           updateData.cookingStartedAt = new Date();
           break;
+        case OrderStatus.REJECTED:
+          if (!updateStatusDto.reason) {
+            throw new BadRequestException('A reason is required when rejecting an order');
+          }
+          updateData.rejectedAt = new Date();
+          updateData.rejectionReason = updateStatusDto.reason;
+          break;
         case OrderStatus.READY:
           updateData.readyAt = new Date();
           break;
@@ -261,6 +302,77 @@ export class OrdersService {
       };
     } catch (error: any) {
       this.logger.error(`❌ Failed to update order status:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Reject an order on behalf of the restaurant.
+   *
+   * Distinct from cancellation: only the restaurant may reject, only before the
+   * food is being prepared, and a reason is always recorded so the customer app
+   * can explain the outcome.
+   */
+  async rejectOrder(rejectOrderDto: RejectOrderDto) {
+    this.logger.log(`🚫 Rejecting order: ${rejectOrderDto.orderId}`);
+
+    try {
+      const existingOrder = await this.prisma.order.findUnique({
+        where: { id: rejectOrderDto.orderId },
+        include: { items: true },
+      });
+
+      if (!existingOrder) {
+        throw new NotFoundException('Order not found');
+      }
+
+      // Required, not optional: an absent actor must not skip the ownership check.
+      if (rejectOrderDto.rejectedBy !== existingOrder.restaurantId) {
+        throw new ForbiddenException('Only the restaurant can reject this order');
+      }
+
+      this.validateStatusTransition(existingOrder.status, OrderStatus.REJECTED);
+
+      const previousStatus = existingOrder.status;
+
+      const rejectedOrder = await this.prisma.order.update({
+        where: { id: rejectOrderDto.orderId },
+        data: {
+          status: OrderStatus.REJECTED,
+          rejectedAt: new Date(),
+          rejectionReason: rejectOrderDto.reason,
+          updatedAt: new Date(),
+        },
+        include: { items: true },
+      });
+
+      await this.createStatusHistory(
+        rejectedOrder.id,
+        OrderStatus.REJECTED,
+        previousStatus,
+        rejectOrderDto.reason,
+        rejectOrderDto.rejectedBy,
+        'RESTAURANT',
+      );
+
+      const statusHistory = await this.prisma.orderStatusHistory.findMany({
+        where: { orderId: rejectedOrder.id },
+        orderBy: { timestamp: 'asc' },
+      });
+
+      const orderWithHistory = { ...rejectedOrder, statusHistory };
+
+      await this.cacheOrder(orderWithHistory);
+      await this.publishOrderEvent('order.rejected', rejectedOrder, previousStatus);
+
+      this.logger.log(`✅ Order rejected: ${rejectedOrder.orderNumber}`);
+
+      return {
+        message: 'Order rejected successfully',
+        order: orderWithHistory,
+      };
+    } catch (error: any) {
+      this.logger.error(`❌ Failed to reject order:`, error.message);
       throw error;
     }
   }
@@ -381,7 +493,7 @@ export class OrdersService {
       ]);
 
       return {
-        orders,
+        orders: orders.map((order) => this.attachTrackingCoords(order)),
         total,
         limit,
         skip,
@@ -404,7 +516,7 @@ export class OrdersService {
       if (cachedOrder) {
         this.logger.log(`🎯 Order found in cache: ${orderId}`);
         // Return cached order (should already include statusHistory)
-        return cachedOrder;
+        return this.attachTrackingCoords(cachedOrder);
       }
 
       this.logger.log(`💾 Cache miss - fetching from database: ${orderId}`);
@@ -432,10 +544,11 @@ export class OrdersService {
       };
 
       // Cache the complete order with status history
-      await this.cacheOrder(orderWithHistory);
+      const hydrated = this.attachTrackingCoords(orderWithHistory);
+      await this.cacheOrder(hydrated);
       this.logger.log(`💾 Order cached: ${orderId}`);
 
-      return orderWithHistory;
+      return hydrated;
     } catch (error: any) {
       this.logger.error(`❌ Failed to get order:`, error.message);
       throw error;
@@ -530,29 +643,26 @@ export class OrdersService {
 
   // Private helper methods
 
-  private async validateOrderItems(items: any[]): Promise<OrderValidationResult> {
+  /**
+   * Structural checks only. Item existence, availability, option rules, and every
+   * price are the restaurants service's responsibility — see `menu.validateItems`.
+   */
+  private async validateOrderItems(items: CreateOrderItemDto[]): Promise<OrderValidationResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
 
     if (!items || items.length === 0) {
       errors.push('Order must contain at least one item');
+      return { isValid: false, errors, warnings };
     }
 
     if (items.length > 50) {
       errors.push('Order cannot contain more than 50 items');
     }
 
-    // Here you would validate against menu items from restaurant service
-    // For now, we'll do basic validation
-
-    for (const item of items) {
-      if (item.quantity <= 0) {
-        errors.push(`Invalid quantity for item: ${item.menuItemName}`);
-      }
-      if (item.unitPrice <= 0) {
-        errors.push(`Invalid price for item: ${item.menuItemName}`);
-      }
-    }
+    // The same menu item may legitimately appear on several lines — one pizza with
+    // extra cheese and one without are two lines of the same item — so lines are
+    // kept distinct and paired positionally rather than deduplicated by id.
 
     return {
       isValid: errors.length === 0,
@@ -561,14 +671,29 @@ export class OrdersService {
     };
   }
 
-  private calculateOrderTotals(orderDto: CreateOrderDto): OrderCalculation {
-    const subtotal = orderDto.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
-    const tax = orderDto.tax || (subtotal * 0.08); // 8% tax
-    const deliveryFee = orderDto.deliveryFee || (orderDto.deliveryType === DeliveryType.DELIVERY ? 5.99 : 0);
-    const discount = orderDto.discount || 0;
-    const total = subtotal + tax + deliveryFee - discount;
+  /**
+   * Builds the order totals from the priced lines returned by the restaurants
+   * service. Tax and delivery fee are policy owned by this service; none of these
+   * figures can be supplied by the caller.
+   */
+  private calculateOrderTotals(
+    pricedItems: PricedOrderItem[],
+    deliveryType: DeliveryType,
+  ): OrderCalculation {
+    const subtotal = this.roundMoney(
+      pricedItems.reduce((sum, item) => sum + item.totalPrice, 0),
+    );
+    const tax = this.roundMoney(subtotal * TAX_RATE);
+    const deliveryFee = deliveryType === DeliveryType.DELIVERY ? DELIVERY_FEE : 0;
+    const discount = 0;
+    const total = this.roundMoney(subtotal + tax + deliveryFee - discount);
 
     return { subtotal, tax, deliveryFee, discount, total };
+  }
+
+  /** Keeps derived money values at two decimals so floating point drift never reaches a total. */
+  private roundMoney(value: number): number {
+    return Math.round(value * 100) / 100;
   }
 
   private async generateOrderNumber(): Promise<string> {
@@ -598,13 +723,16 @@ export class OrdersService {
 
   private validateStatusTransition(currentStatus: OrderStatus, newStatus: OrderStatus): void {
     const validTransitions: Record<OrderStatus, OrderStatus[]> = {
-      [OrderStatus.PENDING]: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
-      [OrderStatus.CONFIRMED]: [OrderStatus.PREPARING, OrderStatus.CANCELLED],
+      // A restaurant may only decline before it starts cooking; after that the
+      // food exists and the order has to be cancelled instead.
+      [OrderStatus.PENDING]: [OrderStatus.CONFIRMED, OrderStatus.REJECTED, OrderStatus.CANCELLED],
+      [OrderStatus.CONFIRMED]: [OrderStatus.PREPARING, OrderStatus.REJECTED, OrderStatus.CANCELLED],
       [OrderStatus.PREPARING]: [OrderStatus.READY, OrderStatus.CANCELLED],
       [OrderStatus.READY]: [OrderStatus.OUT_FOR_DELIVERY, OrderStatus.DELIVERED],
       [OrderStatus.OUT_FOR_DELIVERY]: [OrderStatus.DELIVERED],
       [OrderStatus.DELIVERED]: [], // Final state
       [OrderStatus.CANCELLED]: [], // Final state
+      [OrderStatus.REJECTED]: [], // Final state
     };
 
     if (!validTransitions[currentStatus]?.includes(newStatus)) {
@@ -615,6 +743,23 @@ export class OrdersService {
   private canCancelOrder(status: OrderStatus): boolean {
     const cancellableStatuses: OrderStatus[] = [OrderStatus.PENDING, OrderStatus.CONFIRMED, OrderStatus.PREPARING];
     return cancellableStatuses.includes(status);
+  }
+
+  private attachTrackingCoords<T extends { metadata?: unknown }>(order: T) {
+    const raw = order.metadata;
+    const meta =
+      raw && typeof raw === 'object' && !Array.isArray(raw)
+        ? (raw as Record<string, unknown>)
+        : {};
+    const asNum = (value: unknown): number | undefined =>
+      typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+    return {
+      ...order,
+      deliveryLatitude: asNum(meta.deliveryLatitude),
+      deliveryLongitude: asNum(meta.deliveryLongitude),
+      restaurantLatitude: asNum(meta.restaurantLatitude),
+      restaurantLongitude: asNum(meta.restaurantLongitude),
+    };
   }
 
   private async createStatusHistory(
@@ -643,10 +788,11 @@ export class OrdersService {
     // Dynamic TTL based on order status:
     // - Active orders (PENDING, CONFIRMED, PREPARING, READY, OUT_FOR_DELIVERY): 1 hour
     //   (Cache refreshes on status updates anyway)
-    // - Finalized orders (DELIVERED, CANCELLED): 24 hours
+    // - Finalized orders (DELIVERED, CANCELLED, REJECTED): 24 hours
     //   (These don't change, so longer cache is safe and beneficial)
     const isFinalized = order.status === OrderStatus.DELIVERED || 
-                        order.status === OrderStatus.CANCELLED;
+                        order.status === OrderStatus.CANCELLED ||
+                        order.status === OrderStatus.REJECTED;
     const ttl = isFinalized ? 86400 : 3600; // 24 hours for finalized, 1 hour for active
     
     await this.redisService.set(cacheKey, order, ttl);
@@ -689,6 +835,13 @@ export class OrdersService {
 
       this.logger.log(`📤 Event data prepared for ${eventType}:`, JSON.stringify(eventData, null, 2));
       await this.rabbitMQService.emitEvent(eventType, eventData);
+      this.ordersGateway.broadcastOrderEvent({
+        type: eventType,
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        restaurantId: order.restaurantId,
+        status: order.status,
+      });
       this.logger.log(`✅ Event ${eventType} published successfully`);
     } catch (error: any) {
       this.logger.error(`❌ Failed to publish event ${eventType}:`, error.message);

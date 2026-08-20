@@ -4,6 +4,7 @@ import { OrdersService } from './orders.service';
 import {
   CreateOrderDto,
   UpdateOrderStatusDto,
+  RejectOrderDto,
   CancelOrderDto,
   GetOrdersFilterDto,
   CreateOrderReviewDto,
@@ -107,6 +108,44 @@ export class OrdersResolver {
         error: {
           message: error.message,
           code: error.code || 'UPDATE_ORDER_STATUS_FAILED',
+        },
+      };
+    }
+  }
+
+  @Mutation(() => UpdateOrderStatusResponse)
+  @UseGuards(AuthGuard)
+  async rejectOrder(
+    @Args('rejectOrderDto') rejectOrderDto: RejectOrderDto,
+    @Context() context: Record<string, unknown>,
+  ): Promise<UpdateOrderStatusResponse> {
+    try {
+      this.logger.log(`🚫 Rejecting order: ${rejectOrderDto.orderId}`);
+
+      // The guard puts the authenticated principal's id on the request whether it
+      // is a customer or a restaurant, so the actor is always taken from the token
+      // and never from the body. The service then checks that id really owns the
+      // order's restaurant, which is what makes this restaurant-only.
+      const req = context.req as any;
+      const actorId = req?.restaurant?.id ?? req?.user?.id;
+      if (!actorId) {
+        throw new ForbiddenException('Only a restaurant can reject an order');
+      }
+      rejectOrderDto.rejectedBy = actorId;
+
+      const result = await this.ordersService.rejectOrder(rejectOrderDto);
+
+      return {
+        message: result.message,
+        order: result.order as unknown as Order,
+      };
+    } catch (error) {
+      this.logger.error(`❌ Failed to reject order:`, error.message);
+      return {
+        message: 'Failed to reject order',
+        error: {
+          message: error.message,
+          code: error.code || 'REJECT_ORDER_FAILED',
         },
       };
     }

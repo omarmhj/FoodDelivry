@@ -1,5 +1,25 @@
 import { ObjectType, Field, Float, Int } from '@nestjs/graphql';
 import { OrderStatus, PaymentStatus, DeliveryType } from '../dto/order.dto';
+
+/** A customization the customer chose, snapshotted at the moment of ordering. */
+@ObjectType()
+export class OrderItemOption {
+  @Field()
+  optionId: string;
+
+  @Field()
+  optionGroupId: string;
+
+  @Field()
+  groupName: string;
+
+  @Field()
+  name: string;
+
+  @Field(() => Float)
+  priceDelta: number;
+}
+
 @ObjectType()
 export class OrderItem {
   @Field()
@@ -24,16 +44,22 @@ export class OrderItem {
   quantity: number;
 
   @Field(() => Float)
+  basePrice: number;
+
+  @Field(() => Float)
+  optionsTotal: number;
+
+  @Field(() => Float)
   unitPrice: number;
 
   @Field(() => Float)
   totalPrice: number;
 
+  @Field(() => [OrderItemOption])
+  selectedOptions: OrderItemOption[];
+
   @Field({ nullable: true })
   specialRequests?: string;
-
-  @Field(() => String, { nullable: true })
-  customizations?: any;
 
   @Field(() => String, { nullable: true })
   metadata?: any;
@@ -112,6 +138,18 @@ export class Order {
   @Field({ nullable: true })
   deliveryAddress?: string;
 
+  @Field(() => Float, { nullable: true })
+  deliveryLatitude?: number;
+
+  @Field(() => Float, { nullable: true })
+  deliveryLongitude?: number;
+
+  @Field(() => Float, { nullable: true })
+  restaurantLatitude?: number;
+
+  @Field(() => Float, { nullable: true })
+  restaurantLongitude?: number;
+
   @Field({ nullable: true })
   deliveryInstructions?: string;
 
@@ -143,6 +181,12 @@ export class Order {
 
   @Field({ nullable: true })
   deliveredAt?: Date;
+
+  @Field({ nullable: true })
+  rejectedAt?: Date;
+
+  @Field({ nullable: true })
+  rejectionReason?: string;
 
   // Metadata
   @Field(() => String, { nullable: true })

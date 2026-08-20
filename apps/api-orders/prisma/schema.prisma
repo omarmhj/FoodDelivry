@@ -12,6 +12,10 @@ datasource db {
 }
 
 // Order Status Enum
+//
+// REJECTED is distinct from CANCELLED: the restaurant declined the order, rather
+// than the customer withdrawing it. Keeping them apart lets the customer app show
+// the right message and lets analytics separate demand loss from supply refusal.
 enum OrderStatus {
   PENDING
   CONFIRMED
@@ -20,6 +24,7 @@ enum OrderStatus {
   OUT_FOR_DELIVERY
   DELIVERED
   CANCELLED
+  REJECTED
 }
 
 // Payment Status Enum  
@@ -82,6 +87,8 @@ model Order {
   readyAt               DateTime?
   pickedUpAt            DateTime?
   deliveredAt           DateTime?
+  rejectedAt            DateTime?
+  rejectionReason       String?
   
   // Metadata
   metadata              Json?
@@ -111,11 +118,18 @@ model OrderItem {
   
   // Order Details
   quantity              Int      @default(1)
-  unitPrice             Float
+  
+  // Pricing — every value here is computed by api-restaurants from its own
+  // catalogue at order time, never taken from the request. basePrice and
+  // optionsTotal are kept alongside unitPrice so a receipt can show the
+  // breakdown without re-reading a menu that may have changed since.
+  basePrice             Float    @default(0)
+  optionsTotal          Float    @default(0)
+  unitPrice             Float    // basePrice + optionsTotal
   totalPrice            Float    // quantity * unitPrice
   
   // Customizations
-  customizations        Json?    // Special requests, modifications
+  selectedOptions       OrderItemOption[]
   specialRequests       String?
   
   // Metadata
@@ -124,6 +138,17 @@ model OrderItem {
   updatedAt             DateTime @updatedAt
   
   @@map("OrderItem")
+}
+
+// A snapshot of one option the customer chose, embedded in the order line.
+// Copied rather than referenced so the order still reads correctly after the
+// restaurant renames, reprices, or deletes the option.
+type OrderItemOption {
+  optionId      String
+  optionGroupId String
+  groupName     String
+  name          String
+  priceDelta    Float
 }
 
 // Order History for tracking status changes

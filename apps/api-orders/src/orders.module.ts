@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { OrdersService } from './orders.service';
 import { OrdersResolver } from './orders.resolver';
+import { OrdersGateway } from './orders.gateway';
 import { AuthGuard } from './guards/auth.guard';
 import { SharedModule } from '../../../libs/shared/src/shared.module';
 import { RedisService } from '../../../libs/shared/src/redis.service';
@@ -31,6 +32,7 @@ import { RedisService } from '../../../libs/shared/src/redis.service';
   controllers: [],
   providers: [
     OrdersService,
+    OrdersGateway,
     OrdersResolver,
     PrismaService,
     AuthGuard,

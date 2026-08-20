@@ -9,6 +9,7 @@ import { GqlExecutionContext } from '@nestjs/graphql';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from '../../../../libs/shared/src/redis.service';
+import { RabbitMQService } from '../../../../libs/shared/src/rabbitmq.service';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -18,6 +19,7 @@ export class AuthGuard implements CanActivate {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly redisService: RedisService,
+    private readonly rabbitMQService: RabbitMQService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -69,13 +71,16 @@ export class AuthGuard implements CanActivate {
         secret: this.configService.get<string>('REFRESH_TOKEN_SECRET'),
       });
 
-      const accessToken = this.jwtService.sign(
-        { id: decoded.id, email: decoded.email, role: decoded.role },
-        {
-          secret: this.configService.get<string>('ACCESS_TOKEN_SECRET'),
-          expiresIn: '15m',
-        },
-      );
+      // The refresh token deliberately carries nothing but `id`, so the identity
+      // has to be re-read from whichever service owns it. Reading `email`/`role`
+      // straight off `decoded` looks right but silently yields undefined, which
+      // downgraded every admin to a plain user 15 minutes into a session.
+      const identity = await this.resolveIdentity(decoded.id);
+
+      const accessToken = this.jwtService.sign(identity, {
+        secret: this.configService.get<string>('ACCESS_TOKEN_SECRET'),
+        expiresIn: '15m',
+      });
 
       const refreshToken = this.jwtService.sign(
         { id: decoded.id },
@@ -85,7 +90,7 @@ export class AuthGuard implements CanActivate {
         },
       );
 
-      req.user = { id: decoded.id, email: decoded.email, role: decoded.role };
+      req.user = identity;
       req.accesstoken = accessToken;
       req.refreshtoken = refreshToken;
 
@@ -100,5 +105,42 @@ export class AuthGuard implements CanActivate {
     } catch (error) {
       throw new UnauthorizedException('Session expired. Please login again!');
     }
+  }
+
+  /**
+   * This service owns no accounts collection, so it asks whichever service does.
+   * Customers and restaurants both authenticate here against the same shared
+   * secret, so an id that is not a user is retried as a restaurant before we
+   * give up. Failing to attribute a rotation must not mint a token, so this
+   * throws rather than returning a partial identity.
+   */
+  private async resolveIdentity(
+    id: string,
+  ): Promise<{ id: string; email?: string; role?: string }> {
+    const asUser = await this.rabbitMQService
+      .sendAndWait('user.validate', { userId: id })
+      .catch((error: any) => {
+        this.logger.warn(`user.validate failed for ${id}: ${error?.message}`);
+        return null;
+      });
+
+    if (asUser?.isValid && asUser.user) {
+      return { id, email: asUser.user.email, role: asUser.user.role };
+    }
+
+    const asRestaurant = await this.rabbitMQService
+      .sendAndWait('restaurant.validate', { restaurantId: id })
+      .catch((error: any) => {
+        this.logger.warn(`restaurant.validate failed for ${id}: ${error?.message}`);
+        return null;
+      });
+
+    if (asRestaurant?.isValid && asRestaurant.restaurant) {
+      // Restaurant accounts carry no role claim; api-restaurants signs them the
+      // same way, so keep the shape identical rather than inventing one.
+      return { id, email: asRestaurant.restaurant.email };
+    }
+
+    throw new UnauthorizedException('Session expired. Please login again!');
   }
 }

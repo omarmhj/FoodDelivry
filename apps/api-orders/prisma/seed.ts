@@ -66,13 +66,29 @@ async function main() {
       const status = statuses[i % statuses.length];
       const deliveryType = deliveryTypes[i % deliveryTypes.length];
 
-      // Pick 1-3 random items
-      const orderItems: any[] = Array.from(
+      // Pick 1-3 random items, resolving each to a fully priced line so the
+      // order's subtotal and its lines cannot disagree.
+      const orderLines = Array.from(
         { length: Math.floor(Math.random() * 3) + 1 },
         () => pick(items),
-      );
+      ).map((item: any) => {
+        const unitPrice: number = (item.price as number) || 10;
+        const quantity = Math.floor(Math.random() * 2) + 1;
+        return {
+          menuItemId: item.id,
+          menuItemName: item.name,
+          menuItemDescription: item.description || '',
+          quantity,
+          basePrice: unitPrice,
+          optionsTotal: 0,
+          unitPrice,
+          totalPrice: parseFloat((unitPrice * quantity).toFixed(2)),
+        };
+      });
 
-      const subtotal: number = orderItems.reduce((sum: number, item: any) => sum + (item.price as number || 10), 0);
+      const subtotal: number = parseFloat(
+        orderLines.reduce((sum: number, line) => sum + line.totalPrice, 0).toFixed(2),
+      );
       const tax: number = parseFloat((subtotal * 0.08).toFixed(2));
       const deliveryFee: number = deliveryType === 'DELIVERY' ? 5.99 : 0;
       const total: number = parseFloat((subtotal + tax + deliveryFee).toFixed(2));
@@ -99,14 +115,7 @@ async function main() {
           estimatedDeliveryTime: new Date(Date.now() + 45 * 60 * 1000),
           deliveredAt: status === 'DELIVERED' ? new Date() : null,
           items: {
-            create: orderItems.map((item: any) => ({
-              menuItemId: item.id,
-              menuItemName: item.name,
-              menuItemDescription: item.description || '',
-              quantity: Math.floor(Math.random() * 2) + 1,
-              unitPrice: item.price as number || 10,
-              totalPrice: item.price as number || 10,
-            })),
+            create: orderLines,
           },
         },
       });

@@ -132,6 +132,33 @@ export interface MenuItemValidation {
   error?: string;
 }
 
+/** One chosen customization as priced by api-restaurants. */
+export interface PricedOrderItemOption {
+  optionId: string;
+  optionGroupId: string;
+  groupName: string;
+  name: string;
+  priceDelta: number;
+}
+
+/**
+ * An order line after api-restaurants has resolved it against its catalogue.
+ * This is the shape `menu.validateItems` returns, and the only source of item
+ * copy and prices when an order is persisted.
+ */
+export interface PricedOrderItem {
+  menuItemId: string;
+  menuItemName: string;
+  menuItemDescription?: string;
+  menuItemImage?: string;
+  quantity: number;
+  basePrice: number;
+  optionsTotal: number;
+  unitPrice: number;
+  totalPrice: number;
+  selectedOptions: PricedOrderItemOption[];
+}
+
 // Analytics types
 export interface OrderAnalytics {
   period: 'daily' | 'weekly' | 'monthly' | 'yearly';
